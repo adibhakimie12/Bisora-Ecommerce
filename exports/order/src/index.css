@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-surface: #f8fafc;
+  --color-surface-low: #eef2ff;
+  --color-surface-lowest: #ffffff;
+  --color-on-surface: #111827;
+  --color-muted: #4b5563;
+  --color-primary: #4f46e5;
+  --color-primary-dim: #4338ca;
+  --color-on-primary: #ffffff;
+  --color-secondary: #0f766e;
+  --color-outline: #cbd5e1;
+  --color-success: #047857;
+  --color-warning: #b45309;
+  --color-error: #b91c1c;
+  
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-on-surface font-sans antialiased;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl border border-outline;
+  }
+  
+  .card-shadow {
+    @apply shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)];
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-2.5 text-muted hover:text-primary hover:bg-surface-low transition-colors duration-200 rounded-sm text-sm font-medium;
+  }
+
+  .nav-item-active {
+    @apply flex items-center gap-3 px-4 py-2.5 text-on-primary bg-primary rounded-sm text-sm font-bold;
+  }
+}

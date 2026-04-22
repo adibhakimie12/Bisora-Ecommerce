@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Manrope:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Noto Serif", serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-surface-bright: #f8fafc;
+  --color-surface: #f8fafc;
+  --color-surface-low: #eef2ff;
+  --color-surface-lowest: #ffffff;
+  --color-surface-container: #e5e7eb;
+  --color-surface-container-low: #eef2ff;
+  --color-surface-container-lowest: #ffffff;
+  
+  --color-on-surface: #111827;
+  --color-on-surface-variant: #4b5563;
+  
+  --color-primary: #4f46e5;
+  --color-primary-dim: #4338ca;
+  --color-on-primary: #ffffff;
+  
+  --color-secondary: #0f766e;
+  --color-outline-variant: #94a3b8;
+  --color-success: #047857;
+  --color-warning: #b45309;
+  --color-error: #b91c1c;
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-on-surface font-sans antialiased;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
+  }
+}
+
+/* Custom scrollbar for refined look */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-surface;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-outline-variant/20 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-outline-variant/40;
+}
