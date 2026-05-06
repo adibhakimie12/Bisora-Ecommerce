@@ -171,6 +171,19 @@ Current first template:
 * Luxury editorial Muslimah/feminine commerce
 * Supports fashion, beauty, perfume, cosmetics, lifestyle products
 
+Current template library:
+
+* Maison Noor Editorial (`luxury-muslimah-editorial`)
+* Aurelia Muse (`soft-feminine-luxe`)
+* Lumiere Momentum (`modern-conversion-luxe`)
+
+Lumiere Momentum is the third template direction:
+
+* Modern luxury ecommerce optimized for conversion
+* Warm white, soft beige, elegant black accents, champagne nude
+* Includes urgency, stock cues, trust blocks, quick add, cart upsells, bundle prompts, mobile-first checkout, thank-you order confirmation, and customer dashboard surfaces
+* Built for Muslimah fashion, tudung, beauty, perfume, cosmetics, accessories, and lifestyle products
+
 ---
 
 ## CUSTOMIZE FLOW (IMPORTANT)
@@ -239,7 +252,7 @@ Theme behavior:
 * Account icon in storefront links to the theme's login route
 * Checkout `Already have account? Login` links to the theme's login route
 * Account screens inherit the active theme's visual tone
-* Theme 1 and Theme 2 both support account mock screens
+* Theme 1, Theme 2, and Theme 3 support account mock screens
 * Backend later should replace mock state with real customer session, orders, wishlist, addresses, points, and returns
 
 Future note:

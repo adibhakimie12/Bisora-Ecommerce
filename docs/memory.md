@@ -57,6 +57,10 @@
 - Checkout `Already have account? Login` links to the theme's frontstore login route.
 - After backend later, logged-in customer checkout should autofill email, phone, name, and saved addresses; orders should appear in the customer account.
 - Future affiliate/customer referral features may connect into the customer account area, but do not build affiliate yet.
+- Current storefront template library has 3 themes:
+  - `luxury-muslimah-editorial` / Maison Noor Editorial: luxury editorial Muslimah/feminine commerce.
+  - `soft-feminine-luxe` / Aurelia Muse: soft feminine emotional luxury commerce.
+  - `modern-conversion-luxe` / Lumiere Momentum: modern minimal luxury, urgency, trust, and conversion-focused ecommerce.
 
 ## Current Admin Routes Implemented
 - /dashboard

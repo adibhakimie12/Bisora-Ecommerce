@@ -3,6 +3,8 @@ import { luxuryMuslimahTemplate } from './luxuryMuslimahTemplate';
 import { LuxuryMuslimahTemplatePreview, luxuryTemplateHeroImage, type LuxuryPreviewMode } from './LuxuryMuslimahTemplatePreview';
 import { softFeminineTemplate } from './softFeminineTemplate';
 import { SoftFeminineTemplatePreview, softFeminineHeroImage } from './SoftFeminineTemplatePreview';
+import { modernConversionTemplate } from './modernConversionTemplate';
+import { ModernConversionTemplatePreview, modernConversionHeroImage } from './ModernConversionTemplatePreview';
 import type { LuxuryMuslimahTemplate } from './luxuryMuslimahTemplate';
 import type { ThemeDraftContent } from './themeBuilderModel';
 
@@ -51,6 +53,19 @@ export const storefrontThemes: StorefrontTheme[] = [
     },
     template: softFeminineTemplate,
     Preview: SoftFeminineTemplatePreview,
+  },
+  {
+    id: modernConversionTemplate.id,
+    name: modernConversionTemplate.name,
+    badge: 'Conversion Luxe',
+    image: modernConversionHeroImage,
+    account: {
+      loginPath: `#/frontend/account-login/${modernConversionTemplate.id}`,
+      registerPath: `#/frontend/account-register/${modernConversionTemplate.id}`,
+      dashboardPath: `#/frontend/account/${modernConversionTemplate.id}`,
+    },
+    template: modernConversionTemplate,
+    Preview: ModernConversionTemplatePreview,
   },
 ];
 

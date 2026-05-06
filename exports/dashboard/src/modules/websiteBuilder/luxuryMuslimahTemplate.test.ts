@@ -67,10 +67,12 @@ assert.equal(getCustomizeSections().find((section) => section.key === 'cartDrawe
 assert.equal(getCustomizeSections().find((section) => section.key === 'thankYou')?.previewMode, 'thankYou');
 assert.deepEqual(getBuilderDevices().map((device) => device.key), ['mobile', 'tablet', 'desktop']);
 assert.ok((getBuilderDevices().find((device) => device.key === 'desktop')?.width ?? 0) > 1000);
-assert.deepEqual(storefrontThemes.map((theme) => theme.id), ['luxury-muslimah-editorial', 'soft-feminine-luxe']);
+assert.deepEqual(storefrontThemes.map((theme) => theme.id), ['luxury-muslimah-editorial', 'soft-feminine-luxe', 'modern-conversion-luxe']);
 assert.equal(getStorefrontTheme('soft-feminine-luxe')?.name, 'Aurelia Muse');
+assert.equal(getStorefrontTheme('modern-conversion-luxe')?.name, 'Lumiere Momentum');
 assert.equal(getStorefrontTheme('missing-theme')?.id, 'luxury-muslimah-editorial');
 assert.equal(getStorefrontTheme('soft-feminine-luxe')?.account.loginPath, '#/frontend/account-login/soft-feminine-luxe');
+assert.equal(getStorefrontTheme('modern-conversion-luxe')?.account.loginPath, '#/frontend/account-login/modern-conversion-luxe');
 assert.equal(getStorefrontTheme('luxury-muslimah-editorial')?.account.dashboardPath, '#/frontend/account/luxury-muslimah-editorial');
 
 console.log('luxuryMuslimahTemplate tests passed');

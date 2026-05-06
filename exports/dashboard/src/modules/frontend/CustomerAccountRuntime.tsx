@@ -74,7 +74,7 @@ export function CustomerAccountRuntime({ theme, section }: { theme: StorefrontTh
               </nav>
             </div>
 
-            {section === 'account' && <AccountOverview surfaceClass={surfaceClass} buttonClass={buttonClass} />}
+            {section === 'account' && <AccountOverview surfaceClass={surfaceClass} buttonClass={buttonClass} themeId={theme.id} />}
             {section === 'account-orders' && <OrdersView surfaceClass={surfaceClass} buttonClass={buttonClass} />}
             {section === 'account-wishlist' && <WishlistView surfaceClass={surfaceClass} buttonClass={buttonClass} />}
             {section === 'account-addresses' && <AddressesView surfaceClass={surfaceClass} buttonClass={buttonClass} />}
@@ -141,7 +141,7 @@ function AccountLink({ href, active, label }: { href: string; active: boolean; l
   return <a href={href} className={`rounded-full px-4 py-2 text-sm ${active ? 'bg-white text-black shadow-sm' : 'bg-white/50 text-black/65'}`}>{label}</a>;
 }
 
-function AccountOverview({ surfaceClass, buttonClass }: { surfaceClass: string; buttonClass: string }) {
+function AccountOverview({ surfaceClass, buttonClass, themeId }: { surfaceClass: string; buttonClass: string; themeId: string }) {
   return (
     <div className="mt-8 grid gap-5 md:grid-cols-4">
       {accountModules.map((module) => {
@@ -161,7 +161,7 @@ function AccountOverview({ surfaceClass, buttonClass }: { surfaceClass: string; 
             <p className="text-sm opacity-70">Order #MN1024</p>
             <p className="mt-1 text-xl font-semibold">Preparing for shipment</p>
           </div>
-          <a href="#/frontend/account-orders/luxury-muslimah-editorial" className={`rounded-full px-5 py-3 text-sm ${buttonClass}`}>Track order</a>
+          <a href={`#/frontend/account-orders/${themeId}`} className={`rounded-full px-5 py-3 text-sm ${buttonClass}`}>Track order</a>
         </div>
       </div>
     </div>
