@@ -26,7 +26,6 @@ export const navItems: NavItem[] = [
   { label: 'Reports', href: '#/reports', icon: BarChart3 },
   { label: 'Settings', href: '#/settings', icon: Settings },
   { label: 'Website Builder', href: '#/website-builder', icon: Globe },
-  { label: 'Frontstore Preview', href: '#/frontend', icon: Globe },
 ];
 
 export const kpiMetrics: KpiMetric[] = [
