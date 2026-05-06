@@ -4,15 +4,24 @@ import { categories } from '../products/data';
 import type { Product } from '../products/types';
 import { loadProducts } from '../storefront/productStore';
 import { loadBlogPosts, saveBlogPosts } from '../storefront/blogStore';
+import { getStorefrontTheme } from '../websiteBuilder/themeCatalog';
+import { CustomerAccountRuntime, type CustomerAccountSection } from './CustomerAccountRuntime';
 
 type FrontendSection =
   | 'overview'
+  | 'theme-demo'
   | 'homepage'
   | 'collection'
   | 'product'
   | 'cart'
   | 'checkout'
   | 'thank-you'
+  | 'account-login'
+  | 'account-register'
+  | 'account'
+  | 'account-orders'
+  | 'account-wishlist'
+  | 'account-addresses'
   | 'blog';
 
 const frontendTabs: Array<{ key: FrontendSection; label: string }> = [
@@ -28,6 +37,7 @@ const frontendTabs: Array<{ key: FrontendSection; label: string }> = [
 
 export function FrontendModule({ section, slug }: { section?: string; slug?: string }) {
   const activeSection = normalizeFrontendSection(section);
+  const demoTheme = getStorefrontTheme(slug);
   const [blogPosts, setBlogPosts] = useState(loadBlogPosts);
   const [productRecords] = useState(loadProducts);
   const publishedPosts = blogPosts.filter((post) => post.status === 'Published');
@@ -44,6 +54,10 @@ export function FrontendModule({ section, slug }: { section?: string; slug?: str
       overview: {
         title: 'Frontstore Preview | Bisora',
         description: 'Preview buyer-facing runtime surfaces from homepage to checkout.',
+      },
+      'theme-demo': {
+        title: `${demoTheme.name} Demo | Bisora`,
+        description: `Preview the full buyer-facing ${demoTheme.name} storefront template.`,
       },
       homepage: {
         title: 'Homepage Preview | Bisora',
@@ -64,6 +78,30 @@ export function FrontendModule({ section, slug }: { section?: string; slug?: str
       'thank-you': {
         title: 'Thank You Preview | Bisora',
         description: 'Preview post-purchase thank-you flow, order summary, and retention area.',
+      },
+      'account-login': {
+        title: `${demoTheme.name} Customer Login | Bisora`,
+        description: 'Preview the buyer-facing customer login page.',
+      },
+      'account-register': {
+        title: `${demoTheme.name} Customer Register | Bisora`,
+        description: 'Preview the buyer-facing customer registration page.',
+      },
+      account: {
+        title: `${demoTheme.name} Customer Account | Bisora`,
+        description: 'Preview the buyer-facing customer account dashboard.',
+      },
+      'account-orders': {
+        title: `${demoTheme.name} Customer Orders | Bisora`,
+        description: 'Preview buyer order tracking and purchase history.',
+      },
+      'account-wishlist': {
+        title: `${demoTheme.name} Customer Wishlist | Bisora`,
+        description: 'Preview buyer wishlist in the storefront account.',
+      },
+      'account-addresses': {
+        title: `${demoTheme.name} Customer Addresses | Bisora`,
+        description: 'Preview buyer saved addresses in the storefront account.',
       },
       blog: {
         title: 'Blog Preview | Bisora',
@@ -87,11 +125,33 @@ export function FrontendModule({ section, slug }: { section?: string; slug?: str
       document.head.appendChild(meta);
     }
     meta.setAttribute('content', nextDescription);
-  }, [activeSection, productRecords, slug]);
+  }, [activeSection, productRecords, slug, demoTheme.name]);
 
   useEffect(() => {
     saveBlogPosts(blogPosts);
   }, [blogPosts]);
+
+  if (activeSection === 'theme-demo') {
+    const Preview = demoTheme.Preview;
+    return (
+      <div className="space-y-6">
+        <section className="rounded-3xl border border-outline-variant/20 bg-white p-6 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.3em] text-on-surface-variant">Theme Demo</p>
+          <h1 className="mt-2 text-3xl font-semibold text-on-surface">{demoTheme.name}</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-on-surface-variant">
+            This is the buyer-facing demo preview. Website Builder should show the theme card only; full website viewing happens here or in a new tab.
+          </p>
+        </section>
+        <section className="overflow-hidden rounded-3xl border border-outline-variant/20 bg-white shadow-sm">
+          <Preview />
+        </section>
+      </div>
+    );
+  }
+
+  if (isCustomerAccountSection(activeSection)) {
+    return <CustomerAccountRuntime theme={demoTheme} section={activeSection} />;
+  }
 
   return (
     <div className="space-y-6">
@@ -689,18 +749,36 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function normalizeFrontendSection(section?: string): FrontendSection {
   if (
     section === 'overview' ||
+    section === 'theme-demo' ||
     section === 'homepage' ||
     section === 'collection' ||
     section === 'product' ||
     section === 'cart' ||
     section === 'checkout' ||
     section === 'thank-you' ||
+    section === 'account-login' ||
+    section === 'account-register' ||
+    section === 'account' ||
+    section === 'account-orders' ||
+    section === 'account-wishlist' ||
+    section === 'account-addresses' ||
     section === 'blog'
   ) {
     return section;
   }
 
   return 'overview';
+}
+
+function isCustomerAccountSection(section: FrontendSection): section is CustomerAccountSection {
+  return (
+    section === 'account-login' ||
+    section === 'account-register' ||
+    section === 'account' ||
+    section === 'account-orders' ||
+    section === 'account-wishlist' ||
+    section === 'account-addresses'
+  );
 }
 
 function buildProductSeoTitle(product: Product) {

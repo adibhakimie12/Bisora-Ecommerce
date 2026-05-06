@@ -14,6 +14,8 @@ import { OrdersModule } from './modules/orders/OrdersModule';
 import { ProductsModule } from './modules/products/ProductsModule';
 import { ReportsModule } from './modules/reports/ReportsModule';
 import { SettingsModule } from './modules/settings/SettingsModule';
+import { SuperadminModule } from './modules/superadmin/SuperadminModule';
+import { canAccessSuperadmin, getCurrentAdminEmail } from './modules/superadmin/superadminAccess';
 import { WebsiteBuilderModule } from './modules/websiteBuilder/WebsiteBuilderModule';
 
 type AdminRoute =
@@ -25,6 +27,7 @@ type AdminRoute =
   | { module: 'Frontend'; section?: string; slug?: string }
   | { module: 'Reports'; section?: string }
   | { module: 'Settings'; section?: string; subSection?: string }
+  | { module: 'Superadmin'; section?: string }
   | { module: 'Website Builder'; section?: string; subSection?: string; themeId?: string }
   | { module: 'Placeholder'; label: string };
 
@@ -32,6 +35,7 @@ const routeLabels = new Map([
   ['customers', 'Customers'],
   ['builder', 'Website Builder'],
   ['website-builder', 'Website Builder'],
+  ['superadmin', 'Superadmin'],
 ]);
 
 export default function App() {
@@ -81,6 +85,14 @@ export default function App() {
 
     if (route.module === 'Settings') {
       return <SettingsModule section={route.section} subSection={route.subSection} />;
+    }
+
+    if (route.module === 'Superadmin') {
+      if (!canAccessSuperadmin(getCurrentAdminEmail())) {
+        return <UnauthorizedSuperadminPage />;
+      }
+
+      return <SuperadminModule section={route.section} />;
     }
 
     if (route.module === 'Website Builder') {
@@ -141,6 +153,18 @@ function PlaceholderPage({ label }: { label: string }) {
   );
 }
 
+function UnauthorizedSuperadminPage() {
+  return (
+    <section className="rounded-3xl border border-rose-100 bg-white p-8 shadow-sm">
+      <p className="text-sm font-medium text-rose-700">Owner only</p>
+      <h1 className="mt-2 text-3xl font-semibold text-on-surface">Superadmin access blocked</h1>
+      <p className="mt-4 max-w-xl text-sm leading-6 text-on-surface-variant">
+        This area is only visible to the configured owner email. Backend access control still needs to enforce this later.
+      </p>
+    </section>
+  );
+}
+
 function parseRoute(): AdminRoute {
   const rawHash = window.location.hash.replace(/^#\/?/, '');
   const [segment, id] = rawHash.split('/');
@@ -183,6 +207,10 @@ function parseRoute(): AdminRoute {
 
   if (segment === 'settings') {
     return { module: 'Settings', section: id, subSection: rawHash.split('/')[2] };
+  }
+
+  if (segment === 'superadmin') {
+    return { module: 'Superadmin', section: id };
   }
 
   if (segment === 'website-builder' || segment === 'builder') {

@@ -33,6 +33,31 @@
 - Checkout executes configured offers
 - Shipment notifications are triggered after shipment generation
 
+## Website Builder Template Flow
+- Build storefront templates first, then extract editable fields into Customize.
+- Themes page shows clean template cards only: image, theme name, mood, editable chips, Demo, Install Theme, Customize.
+- Demo opens a website-style storefront preview, preferably new tab/live preview feel, not inside the card.
+- Install Theme saves the theme as an installed draft; it must not become buyer-live immediately.
+- Publish is a theme/storefront-level action that sends the installed draft to Frontstore Preview/live buyer storefront; publish must not appear as a per-section action.
+- Customize uses a hybrid editor: left section list, center live preview canvas, right section settings.
+- Customize sections: Theme Settings, Header, Announcement Bar, Homepage, Collections, Product Page, Cart Drawer, Checkout, Thank You, Account, Footer.
+- Header supports logo text and logo upload.
+- Announcement Bar supports editable announcement text.
+- Homepage supports hero heading, hero subtitle, and hero image upload.
+- Collections supports editing category names/tiles from the Collections section.
+- Buyer flow sections switch preview context: Product Page opens product preview, Cart Drawer opens cart drawer, Checkout opens checkout, Thank You opens thank-you, Account opens account.
+- Customize must auto-save draft changes; Publish is the only action that makes changes live.
+- Center preview must have device modes: Mobile, iPad, Desktop. Device mode changes the preview canvas size, not the browser zoom.
+- At normal Chrome 100% zoom, desktop preview should fit like a scaled canvas so sellers do not need to zoom the browser to 50%.
+- Every new storefront theme template must include buyer-facing customer account surfaces, not admin-only placeholders.
+- Customer account belongs inside the frontstore/website, not the admin system.
+- Customer account routes follow the active theme style: login, register, account dashboard, orders, wishlist, and addresses.
+- Current mock frontstore account routes use `#/frontend/account-login/[themeId]`, `#/frontend/account-register/[themeId]`, `#/frontend/account/[themeId]`, `#/frontend/account-orders/[themeId]`, `#/frontend/account-wishlist/[themeId]`, and `#/frontend/account-addresses/[themeId]`.
+- Theme account icon links to the theme's frontstore login route.
+- Checkout `Already have account? Login` links to the theme's frontstore login route.
+- After backend later, logged-in customer checkout should autofill email, phone, name, and saved addresses; orders should appear in the customer account.
+- Future affiliate/customer referral features may connect into the customer account area, but do not build affiliate yet.
+
 ## Current Admin Routes Implemented
 - /dashboard
 - /orders

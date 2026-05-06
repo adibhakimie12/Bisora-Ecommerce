@@ -130,19 +130,122 @@ Editable:
 
 ### Theme Library
 
-* List of themes
-* Preview
-* Apply theme
+* List of storefront template cards
+* Card shows theme image, name, mood/description, editable field chips, Demo, Install Theme, Customize
+* Theme card must not contain the full website preview
 
 ### Theme Preview
 
-* Live demo before applying
+* Demo opens a website-style storefront preview
+* Demo can open in a new tab or Frontstore Preview route
+* Demo is not live buyer storefront until published
 
 ### Theme Management
 
-* Current theme
-* Customize
-* Upload new theme
+* Install Theme saves the selected theme as an installed draft
+* Installed draft is editable but not buyer-live
+* Publish makes the installed draft live in Frontstore Preview / buyer storefront
+* Publish is a theme/storefront-level action, not a per-section action
+* Installed Themes shows installed draft, live status, View Website, Customize, and Publish
+
+---
+
+## TEMPLATE-FIRST FLOW (CURRENT DECISION)
+
+New themes should be built as complete storefront templates first.
+After the design feels right, extract editable fields and section controls into Customize.
+This avoids a generic builder that feels empty or confusing.
+
+Template flow:
+
+1. Create full website template from prompt/design.
+2. Review it as a real storefront.
+3. Add it as a theme card.
+4. Install Theme saves draft.
+5. Customize edits draft with auto-save.
+6. Publish sends draft live.
+
+Current first template:
+
+* Maison Noor Editorial
+* Luxury editorial Muslimah/feminine commerce
+* Supports fashion, beauty, perfume, cosmetics, lifestyle products
+
+---
+
+## CUSTOMIZE FLOW (IMPORTANT)
+
+Customize uses a hybrid editor:
+
+* Left Panel -> section list
+* Center -> live preview canvas
+* Right Panel -> settings for selected section
+
+Section list:
+
+* Theme Settings
+* Header
+* Announcement Bar
+* Homepage
+* Collections
+* Product Page
+* Cart Drawer
+* Checkout
+* Thank You
+* Account
+* Footer
+
+Editing rules:
+
+* Header edits logo text and logo upload
+* Announcement Bar edits announcement text
+* Homepage edits hero heading, hero subtitle, hero image
+* Collections edits category names/tiles
+* Product Page switches center preview to product page
+* Cart Drawer switches center preview and opens cart drawer
+* Checkout switches center preview to checkout
+* Thank You switches center preview to thank-you page
+* Account switches center preview to customer account
+* Changes auto-save as draft
+* User publishes only from theme/storefront level
+
+---
+
+## CUSTOMER ACCOUNT IN THEMES
+
+Customer account is part of the buyer-facing frontstore, not the admin dashboard.
+Each storefront theme must provide a themed customer account experience.
+
+Required buyer-facing account routes:
+
+* Login
+* Register
+* Account dashboard
+* Orders / order tracking
+* Wishlist
+* Saved addresses
+
+Current route pattern:
+
+* `#/frontend/account-login/[themeId]`
+* `#/frontend/account-register/[themeId]`
+* `#/frontend/account/[themeId]`
+* `#/frontend/account-orders/[themeId]`
+* `#/frontend/account-wishlist/[themeId]`
+* `#/frontend/account-addresses/[themeId]`
+
+Theme behavior:
+
+* Account icon in storefront links to the theme's login route
+* Checkout `Already have account? Login` links to the theme's login route
+* Account screens inherit the active theme's visual tone
+* Theme 1 and Theme 2 both support account mock screens
+* Backend later should replace mock state with real customer session, orders, wishlist, addresses, points, and returns
+
+Future note:
+
+* Affiliate/referral can later connect into this customer account area
+* Do not build affiliate until explicitly prioritized
 
 ---
 
@@ -161,6 +264,11 @@ Editable:
 * Desktop view
 * Tablet view
 * Mobile view
+* Current labels are Desktop, iPad, Mobile
+* Device buttons live in the preview header
+* Device mode changes canvas width/scale inside the builder
+* Do not rely on browser zoom for preview correctness
+* At Chrome 100% zoom, the desktop canvas should still look like a usable storefront preview
 
 User can:
 

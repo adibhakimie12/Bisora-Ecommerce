@@ -6,6 +6,7 @@ import {
   Package,
   PlusCircle,
   Settings,
+  ShieldCheck,
   ShoppingBag,
   TrendingUp,
   Users,
@@ -16,6 +17,7 @@ import {
 import type { ActivityItem, KpiMetric, NavItem, QuickAction, RevenuePoint, Transaction } from './types';
 
 export const navItems: NavItem[] = [
+  { label: 'Superadmin', href: '#/superadmin', icon: ShieldCheck },
   { label: 'Dashboard', href: '#/dashboard', icon: LayoutDashboard },
   { label: 'Orders', href: '#/orders', icon: ShoppingBag },
   { label: 'Products', href: '#/products', icon: Package },
