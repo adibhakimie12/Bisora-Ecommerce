@@ -7,7 +7,7 @@ import { getPreviewModeFromAction, normalizePreviewMode } from './LuxuryMuslimah
 import type { LuxuryTemplateProduct } from './luxuryMuslimahTemplate';
 import type { ThemeDraftContent } from './themeBuilderModel';
 
-export const modernConversionHeroImage = 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=1400&q=80';
+export const modernConversionHeroImage = 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=1400&q=80';
 
 const modernImages = [
   modernConversionHeroImage,

@@ -74,5 +74,7 @@ assert.equal(getStorefrontTheme('missing-theme')?.id, 'luxury-muslimah-editorial
 assert.equal(getStorefrontTheme('soft-feminine-luxe')?.account.loginPath, '#/frontend/account-login/soft-feminine-luxe');
 assert.equal(getStorefrontTheme('modern-conversion-luxe')?.account.loginPath, '#/frontend/account-login/modern-conversion-luxe');
 assert.equal(getStorefrontTheme('luxury-muslimah-editorial')?.account.dashboardPath, '#/frontend/account/luxury-muslimah-editorial');
+const themeImageSources = storefrontThemes.map((theme) => theme.image.split('?')[0]);
+assert.equal(new Set(themeImageSources).size, storefrontThemes.length);
 
 console.log('luxuryMuslimahTemplate tests passed');
