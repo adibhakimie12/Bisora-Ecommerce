@@ -70,6 +70,8 @@
 - Admin can add blocks by click or drag/drop, insert between blocks, reorder, duplicate, delete, and edit block copy/settings.
 - Body settings must control real preview output: title/body, HTML/embed code, column count, video URL, countdown end time, button action, form fields, alignment, tone, width, vertical padding, colors, and desktop/mobile visibility.
 - Image settings must include upload-style file picker, image URL/name, alignment, and alternate text.
+- Upload controls in the landing page builder must render the selected image in the canvas/runtime preview, not only show the file name.
+- Columns are container blocks with editable column items; each column item can be text, image, or button content and must render inside the column slot.
 - Button actions must support URL, checkout target, WhatsApp, Telegram, and lead form anchor.
 - Pages must include desktop/mobile preview modes inside the canvas; device mode changes canvas width and honors hide-on-device toggles.
 - Publish must validate readiness before marking a page live: title, slug, required CTA targets, image values, video URLs, and lead form fields.

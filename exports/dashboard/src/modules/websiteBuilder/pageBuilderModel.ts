@@ -2,6 +2,17 @@ export type LandingBlockType = 'columns' | 'button' | 'divider' | 'heading' | 'h
 export type LandingBlockAlign = 'left' | 'center' | 'right';
 export type LandingBlockTone = 'white' | 'soft' | 'dark' | 'brand';
 export type LandingButtonAction = 'url' | 'checkout' | 'whatsapp' | 'telegram' | 'leadForm';
+export type LandingColumnKind = 'text' | 'image' | 'button';
+
+export interface LandingColumnItem {
+  kind: LandingColumnKind;
+  title: string;
+  body: string;
+  imageName: string;
+  imageSrc: string;
+  buttonText: string;
+  buttonTarget: string;
+}
 
 export interface LandingBlock {
   id: string;
@@ -9,6 +20,7 @@ export interface LandingBlock {
   title: string;
   body: string;
   imageName: string;
+  imageSrc: string;
   videoUrl: string;
   buttonText: string;
   buttonLink: string;
@@ -17,6 +29,7 @@ export interface LandingBlock {
   html: string;
   timerEnd: string;
   columns: number;
+  columnItems: LandingColumnItem[];
   formFields: string[];
   widthPercent: number;
   paddingY: number;
@@ -89,6 +102,7 @@ export function createLandingBlock(type: LandingBlockType, id = createBlockId(ty
     title: getDefaultTitle(type),
     body: getDefaultBody(type),
     imageName: '',
+    imageSrc: '',
     videoUrl: '',
     buttonText: type === 'button' ? 'Dapatkan Sekarang' : 'Shop now',
     buttonLink: '#',
@@ -97,6 +111,7 @@ export function createLandingBlock(type: LandingBlockType, id = createBlockId(ty
     html: '<strong>Hello, world!</strong>',
     timerEnd: '2026-12-31 23:59',
     columns: type === 'columns' ? 3 : 1,
+    columnItems: createDefaultColumnItems(type === 'columns' ? 3 : 1),
     formFields: ['name', 'email', 'phone'],
     widthPercent: 100,
     paddingY: type === 'divider' ? 12 : 32,
@@ -147,7 +162,25 @@ export function deleteLandingBlock(page: LandingPageDraft, blockId: string): Lan
 export function updateLandingBlock(page: LandingPageDraft, blockId: string, patch: Partial<LandingBlock>): LandingPageDraft {
   return touchPage({
     ...page,
-    blocks: page.blocks.map((block) => (block.id === blockId ? { ...block, ...patch, id: block.id, type: block.type } : block)),
+    blocks: page.blocks.map((block) => {
+      if (block.id !== blockId) return block;
+      const nextBlock = { ...block, ...patch, id: block.id, type: block.type };
+      if (block.type === 'columns' && typeof patch.columns === 'number') {
+        nextBlock.columnItems = resizeColumnItems(block.columnItems, patch.columns);
+      }
+      return nextBlock;
+    }),
+  });
+}
+
+export function updateLandingColumn(page: LandingPageDraft, blockId: string, columnIndex: number, patch: Partial<LandingColumnItem>): LandingPageDraft {
+  return touchPage({
+    ...page,
+    blocks: page.blocks.map((block) => {
+      if (block.id !== blockId || block.type !== 'columns') return block;
+      const columnItems = resizeColumnItems(block.columnItems, block.columns).map((item, index) => (index === columnIndex ? { ...item, ...patch } : item));
+      return { ...block, columnItems };
+    }),
   });
 }
 
@@ -156,7 +189,11 @@ export function normalizeLandingPage(page: LandingPageDraft): LandingPageDraft {
   const rawBlocks = Array.isArray(page.blocks) ? page.blocks : [];
   const blocks = rawBlocks.map((block) => {
     const type = normalizeBlockType(block.type);
-    return { ...createLandingBlock(type, block.id), ...block, type };
+    const normalizedBlock = { ...createLandingBlock(type, block.id), ...block, type };
+    if (type === 'columns') {
+      normalizedBlock.columnItems = resizeColumnItems(normalizedBlock.columnItems, normalizedBlock.columns);
+    }
+    return normalizedBlock;
   });
 
   return {
@@ -184,7 +221,7 @@ export function validateLandingPageForPublish(page: LandingPageDraft): { ready: 
     }
     if (block.type === 'form' && block.formFields.length === 0) issues.push(`${label}: Lead form needs at least one field.`);
     if (block.type === 'video' && !block.videoUrl.trim()) issues.push(`${label}: Video URL is empty.`);
-    if (block.type === 'image' && !block.imageName.trim()) issues.push(`${label}: Image is empty.`);
+    if (block.type === 'image' && !block.imageName.trim() && !block.imageSrc.trim()) issues.push(`${label}: Image is empty.`);
   });
 
   return { ready: issues.length === 0, issues };
@@ -212,6 +249,24 @@ function touchPage(page: LandingPageDraft): LandingPageDraft {
 
 function createBlockId(type: LandingBlockType) {
   return `${type}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function createDefaultColumnItems(count: number): LandingColumnItem[] {
+  return Array.from({ length: count }).map((_, index) => ({
+    kind: 'text',
+    title: `Column ${index + 1}`,
+    body: 'Add text, image, or CTA here.',
+    imageName: '',
+    imageSrc: '',
+    buttonText: 'Learn more',
+    buttonTarget: '#',
+  }));
+}
+
+function resizeColumnItems(items: LandingColumnItem[] | undefined, count: number): LandingColumnItem[] {
+  const safeItems = Array.isArray(items) ? items : [];
+  const defaults = createDefaultColumnItems(count);
+  return defaults.map((defaultItem, index) => ({ ...defaultItem, ...safeItems[index] }));
 }
 
 function normalizeBlockType(type: unknown): LandingBlockType {

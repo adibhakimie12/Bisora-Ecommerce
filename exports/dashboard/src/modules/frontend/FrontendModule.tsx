@@ -845,9 +845,13 @@ function LandingRuntimeBlock({ block, onLeadSubmit }: { block: LandingBlock; onL
   if (block.type === 'image') {
     return (
       <section className={`px-6 ${alignClass}`} style={style}>
-        <div className="grid min-h-72 place-items-center rounded-2xl bg-surface-low text-on-surface-variant">
-          <span>{block.imageName || 'Image placeholder'}</span>
-        </div>
+        {block.imageSrc ? (
+          <img src={block.imageSrc} alt={block.title} className="max-h-[620px] w-full rounded-2xl object-cover" />
+        ) : (
+          <div className="grid min-h-72 place-items-center rounded-2xl bg-surface-low text-on-surface-variant">
+            <span>{block.imageName || 'Image placeholder'}</span>
+          </div>
+        )}
       </section>
     );
   }
@@ -865,11 +869,7 @@ function LandingRuntimeBlock({ block, onLeadSubmit }: { block: LandingBlock; onL
   if (block.type === 'columns') {
     return (
       <section className="grid gap-4 px-6" style={{ ...style, gridTemplateColumns: `repeat(${block.columns}, minmax(0, 1fr))` }}>
-        {Array.from({ length: block.columns }).map((_, index) => (
-          <div key={index} className="rounded-2xl border border-outline-variant/20 p-5 text-sm text-on-surface-variant">
-            {block.body}
-          </div>
-        ))}
+        {block.columnItems.slice(0, block.columns).map((item, index) => <LandingRuntimeColumnItem key={index} item={item} />)}
       </section>
     );
   }
@@ -930,6 +930,35 @@ function LandingRuntimeBlock({ block, onLeadSubmit }: { block: LandingBlock; onL
       <h1 className={`${block.type === 'heading' ? 'text-5xl' : 'text-3xl'} font-semibold`}>{block.title}</h1>
       <p className="mx-auto mt-4 max-w-3xl whitespace-pre-line text-base leading-7 opacity-80">{block.body}</p>
     </section>
+  );
+}
+
+function LandingRuntimeColumnItem({ item }: { item: LandingBlock['columnItems'][number] }) {
+  if (item.kind === 'image') {
+    return (
+      <div className="rounded-2xl border border-outline-variant/20 p-4 text-sm text-on-surface-variant">
+        {item.imageSrc ? <img src={item.imageSrc} alt={item.title} className="h-52 w-full rounded-xl object-cover" /> : <div className="grid h-52 place-items-center rounded-xl bg-surface-low">{item.imageName || 'Image'}</div>}
+        <h3 className="mt-4 text-lg font-semibold text-on-surface">{item.title}</h3>
+        <p className="mt-2 leading-6">{item.body}</p>
+      </div>
+    );
+  }
+
+  if (item.kind === 'button') {
+    return (
+      <div className="grid min-h-44 place-items-center rounded-2xl border border-outline-variant/20 p-5 text-center">
+        <button onClick={() => window.open(item.buttonTarget || '#', '_blank', 'noopener,noreferrer')} className="rounded-full bg-primary px-6 py-3 text-sm font-semibold text-on-primary" type="button">
+          {item.buttonText}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/20 p-5 text-sm text-on-surface-variant">
+      <h3 className="text-lg font-semibold text-on-surface">{item.title}</h3>
+      <p className="mt-2 leading-6">{item.body}</p>
+    </div>
   );
 }
 

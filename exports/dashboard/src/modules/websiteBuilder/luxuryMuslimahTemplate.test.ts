@@ -24,6 +24,7 @@ import {
   deleteLandingBlock,
   duplicateLandingBlock,
   moveLandingBlock,
+  updateLandingColumn,
   updateLandingBlock,
   updateLandingPageMeta,
   validateLandingPageForPublish,
@@ -110,6 +111,19 @@ assert.equal(withVideoAtTop.blocks[0].type, 'video');
 const withFormBlock = addLandingBlock(landingPage, 'form');
 assert.equal(withFormBlock.blocks.at(-1)?.type, 'form');
 assert.deepEqual(withFormBlock.blocks.at(-1)?.formFields, ['name', 'email', 'phone']);
+const withColumnsBlock = addLandingBlock(landingPage, 'columns');
+const columnsBlock = withColumnsBlock.blocks.at(-1);
+assert.equal(columnsBlock?.columnItems.length, 3);
+const withColumnImage = updateLandingColumn(withColumnsBlock, columnsBlock?.id ?? '', 1, {
+  kind: 'image',
+  title: 'Product visual',
+  body: 'Bundle image',
+  imageName: 'bundle.png',
+  imageSrc: 'data:image/png;base64,abc',
+});
+const updatedColumnsBlock = withColumnImage.blocks.find((block) => block.id === columnsBlock?.id);
+assert.equal(updatedColumnsBlock?.columnItems[1].kind, 'image');
+assert.equal(updatedColumnsBlock?.columnItems[1].imageSrc, 'data:image/png;base64,abc');
 const movedImageBlock = moveLandingBlock(withImageBlock, withImageBlock.blocks.at(-1)?.id ?? '', 'up');
 assert.equal(movedImageBlock.blocks.at(-2)?.type, 'image');
 assert.equal(moveLandingBlock(withImageBlock, withImageBlock.blocks.at(-1)?.id ?? '', 0).blocks[0].type, 'image');

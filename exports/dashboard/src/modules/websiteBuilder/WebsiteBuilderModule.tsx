@@ -39,6 +39,7 @@ import {
   moveLandingBlock,
   normalizeLandingPage,
   updateLandingBlock,
+  updateLandingColumn,
   updateLandingPageMeta,
   validateLandingPageForPublish,
   type LandingBlock,
@@ -46,6 +47,8 @@ import {
   type LandingButtonAction,
   type LandingBlockTone,
   type LandingBlockType,
+  type LandingColumnItem,
+  type LandingColumnKind,
   type LandingPageDraft,
 } from './pageBuilderModel';
 import {
@@ -663,14 +666,25 @@ function TextareaControl({ label, value, onChange }: { label: string; value: str
   );
 }
 
-function UploadControl({ label, fileName, onChange }: { label: string; fileName: string; onChange: (fileName: string) => void }) {
+function UploadControl({ label, fileName, onChange }: { label: string; fileName: string; onChange: (fileName: string, imageSrc: string) => void }) {
+  function handleFile(file?: File) {
+    if (!file) {
+      onChange('', '');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => onChange(file.name, typeof reader.result === 'string' ? reader.result : '');
+    reader.readAsDataURL(file);
+  }
+
   return (
     <label className="block rounded-2xl border border-dashed border-outline-variant/30 bg-surface-low p-4">
       <span className="flex items-center gap-2 text-sm font-medium text-on-surface">
         <Upload className="h-4 w-4 text-primary" />
         {label}
       </span>
-      <input type="file" accept="image/*" className="mt-3 w-full text-sm text-on-surface-variant" onChange={(event) => onChange(event.target.files?.[0]?.name ?? '')} />
+      <input type="file" accept="image/*" className="mt-3 w-full text-sm text-on-surface-variant" onChange={(event) => handleFile(event.target.files?.[0])} />
       <span className="mt-3 block rounded-full bg-white px-3 py-2 text-xs text-on-surface-variant">{fileName || 'No file chosen yet'}</span>
     </label>
   );
@@ -793,8 +807,20 @@ function PagesBuilderView({ page, onChangePage }: { page: LandingPageDraft; onCh
               <input value={page.slug} onChange={(event) => onChangePage(updateLandingPageMeta(page, { slug: event.target.value }))} className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs outline-none focus:border-primary" />
             </div>
             {activePanel === 'blocks' && <LandingBlockLibrary onAddBlock={addBlock} />}
-            {activePanel === 'body' && selectedBlock && <LandingBlockSettings block={selectedBlock} onChange={(patch) => onChangePage(updateLandingBlock(page, selectedBlock.id, patch))} />}
-            {activePanel === 'images' && selectedBlock && <LandingImagePanel block={selectedBlock} onChange={(patch) => onChangePage(updateLandingBlock(page, selectedBlock.id, patch))} />}
+            {activePanel === 'body' && selectedBlock && (
+              <LandingBlockSettings
+                block={selectedBlock}
+                onChange={(patch) => onChangePage(updateLandingBlock(page, selectedBlock.id, patch))}
+                onChangeColumn={(columnIndex, patch) => onChangePage(updateLandingColumn(page, selectedBlock.id, columnIndex, patch))}
+              />
+            )}
+            {activePanel === 'images' && selectedBlock && (
+              <LandingImagePanel
+                block={selectedBlock}
+                onChange={(patch) => onChangePage(updateLandingBlock(page, selectedBlock.id, patch))}
+                onChangeColumn={(columnIndex, patch) => onChangePage(updateLandingColumn(page, selectedBlock.id, columnIndex, patch))}
+              />
+            )}
           </div>
         </aside>
 
@@ -947,7 +973,11 @@ function LandingBlockPreview({ block, device }: { block: LandingBlock; device: '
   }
 
   if (block.type === 'image') {
-    return <div className="grid min-h-52 place-items-center bg-surface-low px-6 text-center text-on-surface-variant" style={shellStyle}><ImageIcon className="mb-2 h-8 w-8" />{block.imageName || 'Upload image'}</div>;
+    return (
+      <div className="grid min-h-52 place-items-center bg-surface-low px-6 text-center text-on-surface-variant" style={shellStyle}>
+        {block.imageSrc ? <img src={block.imageSrc} alt={block.title} className="max-h-72 w-full rounded-xl object-cover" /> : <><ImageIcon className="mb-2 h-8 w-8" />{block.imageName || 'Upload image'}</>}
+      </div>
+    );
   }
 
   if (block.type === 'video') {
@@ -958,9 +988,7 @@ function LandingBlockPreview({ block, device }: { block: LandingBlock; device: '
     return (
       <div className="grid min-h-32 gap-2 bg-[#e9f8fb] px-4" style={{ ...shellStyle, gridTemplateColumns: `repeat(${block.columns}, minmax(0, 1fr))` }}>
         {Array.from({ length: block.columns }).map((_, index) => (
-          <div key={index} className="grid min-h-24 place-items-center border border-dashed border-[#54c3d8] bg-white/70 text-center text-xs text-[#3294aa]">
-            No content here.<br />Drag content from left.
-          </div>
+          <ColumnItemPreview key={index} item={block.columnItems[index]} />
         ))}
       </div>
     );
@@ -1006,7 +1034,42 @@ function LandingBlockPreview({ block, device }: { block: LandingBlock; device: '
   );
 }
 
-function LandingBlockSettings({ block, onChange }: { block: LandingBlock; onChange: (patch: Partial<LandingBlock>) => void }) {
+function ColumnItemPreview({ item }: { item: LandingColumnItem }) {
+  if (item.kind === 'image') {
+    return (
+      <div className="min-h-28 border border-dashed border-[#54c3d8] bg-white/70 p-3 text-center text-xs text-[#3294aa]">
+        {item.imageSrc ? <img src={item.imageSrc} alt={item.title} className="h-32 w-full rounded-lg object-cover" /> : <ImageIcon className="mx-auto mb-2 h-7 w-7" />}
+        <p className="mt-2 font-medium text-on-surface">{item.title}</p>
+        <p>{item.imageName || item.body}</p>
+      </div>
+    );
+  }
+
+  if (item.kind === 'button') {
+    return (
+      <div className="grid min-h-28 place-items-center border border-dashed border-[#54c3d8] bg-white/70 p-3 text-center text-xs text-[#3294aa]">
+        <button className="rounded bg-[#22aeca] px-4 py-2 text-xs font-semibold text-white" type="button">{item.buttonText}</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-28 border border-dashed border-[#54c3d8] bg-white/70 p-3 text-left text-xs text-on-surface-variant">
+      <p className="font-semibold text-on-surface">{item.title}</p>
+      <p className="mt-2 leading-5">{item.body}</p>
+    </div>
+  );
+}
+
+function LandingBlockSettings({
+  block,
+  onChange,
+  onChangeColumn,
+}: {
+  block: LandingBlock;
+  onChange: (patch: Partial<LandingBlock>) => void;
+  onChangeColumn: (columnIndex: number, patch: Partial<LandingColumnItem>) => void;
+}) {
   return (
     <div>
       <div className="flex items-start justify-between gap-3">
@@ -1020,8 +1083,13 @@ function LandingBlockSettings({ block, onChange }: { block: LandingBlock; onChan
         {block.type !== 'divider' && <TextControl label="Title" value={block.title} onChange={(title) => onChange({ title })} />}
         {block.type !== 'divider' && <TextareaControl label="Text / Body" value={block.body} onChange={(body) => onChange({ body })} />}
         {block.type === 'html' && <TextareaControl label="HTML / Embed Code" value={block.html} onChange={(html) => onChange({ html })} />}
-        {block.type === 'columns' && <SelectControl label="Columns" value={String(block.columns)} options={['1', '2', '3', '4']} onChange={(columns) => onChange({ columns: Number(columns) })} />}
-        {(block.type === 'image') && <UploadControl label="Upload Image" fileName={block.imageName} onChange={(imageName) => onChange({ imageName })} />}
+        {block.type === 'columns' && (
+          <>
+            <SelectControl label="Columns" value={String(block.columns)} options={['1', '2', '3', '4']} onChange={(columns) => onChange({ columns: Number(columns) })} />
+            <ColumnItemsEditor block={block} onChangeColumn={onChangeColumn} />
+          </>
+        )}
+        {(block.type === 'image') && <UploadControl label="Upload Image" fileName={block.imageName} onChange={(imageName, imageSrc) => onChange({ imageName, imageSrc })} />}
         {block.type === 'video' && <TextControl label="Video URL" value={block.videoUrl} onChange={(videoUrl) => onChange({ videoUrl })} />}
         {block.type === 'timer' && <TextControl label="End Time" value={block.timerEnd} onChange={(timerEnd) => onChange({ timerEnd })} />}
         {block.type === 'button' && (
@@ -1059,7 +1127,46 @@ function LandingBlockSettings({ block, onChange }: { block: LandingBlock; onChan
   );
 }
 
-function LandingImagePanel({ block, onChange }: { block: LandingBlock; onChange: (patch: Partial<LandingBlock>) => void }) {
+function ColumnItemsEditor({ block, onChangeColumn }: { block: LandingBlock; onChangeColumn: (columnIndex: number, patch: Partial<LandingColumnItem>) => void }) {
+  return (
+    <div className="space-y-3 rounded-2xl border border-outline-variant/20 bg-surface-low p-3">
+      <p className="text-sm font-medium text-on-surface">Column Content</p>
+      {block.columnItems.slice(0, block.columns).map((item, index) => (
+        <div key={index} className="space-y-3 rounded-xl bg-white p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-on-surface">Column {index + 1}</p>
+            <select value={item.kind} onChange={(event) => onChangeColumn(index, { kind: event.target.value as LandingColumnKind })} className="rounded-lg border border-outline-variant/20 px-2 py-1 text-xs">
+              <option value="text">Text</option>
+              <option value="image">Image</option>
+              <option value="button">Button</option>
+            </select>
+          </div>
+          <TextControl label="Title" value={item.title} onChange={(title) => onChangeColumn(index, { title })} />
+          {item.kind === 'image' ? (
+            <UploadControl label="Upload Column Image" fileName={item.imageName} onChange={(imageName, imageSrc) => onChangeColumn(index, { imageName, imageSrc })} />
+          ) : item.kind === 'button' ? (
+            <>
+              <TextControl label="Button Text" value={item.buttonText} onChange={(buttonText) => onChangeColumn(index, { buttonText })} />
+              <TextControl label="Button Target" value={item.buttonTarget} onChange={(buttonTarget) => onChangeColumn(index, { buttonTarget })} />
+            </>
+          ) : (
+            <TextareaControl label="Text" value={item.body} onChange={(body) => onChangeColumn(index, { body })} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LandingImagePanel({
+  block,
+  onChange,
+  onChangeColumn,
+}: {
+  block: LandingBlock;
+  onChange: (patch: Partial<LandingBlock>) => void;
+  onChangeColumn: (columnIndex: number, patch: Partial<LandingColumnItem>) => void;
+}) {
   return (
     <div>
       <div className="flex items-start justify-between gap-3">
@@ -1070,7 +1177,8 @@ function LandingImagePanel({ block, onChange }: { block: LandingBlock; onChange:
         <span className="rounded-full bg-surface-low px-3 py-1 text-xs text-on-surface-variant">Upload</span>
       </div>
       <div className="mt-5 space-y-4">
-        <UploadControl label="Upload Image" fileName={block.imageName} onChange={(imageName) => onChange({ imageName })} />
+        {block.type === 'columns' && <ColumnItemsEditor block={block} onChangeColumn={onChangeColumn} />}
+        {block.type !== 'columns' && <UploadControl label="Upload Image" fileName={block.imageName} onChange={(imageName, imageSrc) => onChange({ imageName, imageSrc })} />}
         <TextControl label="Image URL" value={block.imageName} onChange={(imageName) => onChange({ imageName })} />
         <SelectControl label="Align" value={block.align} options={['left', 'center', 'right']} onChange={(align) => onChange({ align: align as LandingBlockAlign })} />
         <TextControl label="Alternate Text" value={block.title} onChange={(title) => onChange({ title })} />
