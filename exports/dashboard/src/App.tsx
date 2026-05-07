@@ -102,6 +102,10 @@ export default function App() {
     return <PlaceholderPage label={route.label} />;
   }, [route]);
 
+  if (route.module === 'Frontend' && (route.section === 'landing-page-preview' || route.section === 'landing-page')) {
+    return <div className="min-h-screen bg-white text-on-surface">{content}</div>;
+  }
+
   return (
     <div className="min-h-screen bg-surface text-on-surface">
       <Sidebar activeItem={activeItem} />

@@ -36,7 +36,7 @@ import {
 import { categories, productKpiMetrics, products } from './data';
 import { loadProducts, saveProducts } from '../storefront/productStore';
 import { ProductStatusBadge } from './ProductStatusBadge';
-import type { Category, CategoryDetailTab, Product, ProductTab } from './types';
+import type { Category, CategoryDetailTab, Product, ProductTab, StockState } from './types';
 
 interface ProductsModuleProps {
   section?: string;

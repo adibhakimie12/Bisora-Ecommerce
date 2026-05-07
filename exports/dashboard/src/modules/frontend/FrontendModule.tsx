@@ -5,6 +5,14 @@ import type { Product } from '../products/types';
 import { loadProducts } from '../storefront/productStore';
 import { loadBlogPosts, saveBlogPosts } from '../storefront/blogStore';
 import { getStorefrontTheme } from '../websiteBuilder/themeCatalog';
+import {
+  canViewPublishedLandingPage,
+  createDefaultLandingPage,
+  landingPageStorageKey,
+  normalizeLandingPage,
+  type LandingBlock,
+  type LandingPageDraft,
+} from '../websiteBuilder/pageBuilderModel';
 import { CustomerAccountRuntime, type CustomerAccountSection } from './CustomerAccountRuntime';
 
 type FrontendSection =
@@ -22,6 +30,8 @@ type FrontendSection =
   | 'account-orders'
   | 'account-wishlist'
   | 'account-addresses'
+  | 'landing-page-preview'
+  | 'landing-page'
   | 'blog';
 
 const frontendTabs: Array<{ key: FrontendSection; label: string }> = [
@@ -103,6 +113,14 @@ export function FrontendModule({ section, slug }: { section?: string; slug?: str
         title: `${demoTheme.name} Customer Addresses | Bisora`,
         description: 'Preview buyer saved addresses in the storefront account.',
       },
+      'landing-page-preview': {
+        title: 'Landing Page Draft Preview | Bisora',
+        description: 'Preview the current landing page draft before publishing.',
+      },
+      'landing-page': {
+        title: 'Landing Page | Bisora',
+        description: 'Published buyer-facing landing page.',
+      },
       blog: {
         title: 'Blog Preview | Bisora',
         description: 'Preview published journal content and SEO-supporting storefront articles.',
@@ -147,6 +165,10 @@ export function FrontendModule({ section, slug }: { section?: string; slug?: str
         </section>
       </div>
     );
+  }
+
+  if (activeSection === 'landing-page-preview' || activeSection === 'landing-page') {
+    return <LandingPageRuntime mode={activeSection === 'landing-page' ? 'live' : 'preview'} slug={slug} />;
   }
 
   if (isCustomerAccountSection(activeSection)) {
@@ -746,6 +768,197 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function LandingPageRuntime({ mode, slug }: { mode: 'preview' | 'live'; slug?: string }) {
+  const [submitted, setSubmitted] = useState(false);
+  const page = loadLandingPageRuntime();
+  const isWrongSlug = Boolean(slug && page.slug !== decodeURIComponent(slug));
+  const canRenderLive = mode === 'preview' || canViewPublishedLandingPage(page);
+
+  useEffect(() => {
+    document.title = `${page.title || 'Landing Page'} | Bisora`;
+  }, [page.title]);
+
+  if (!canRenderLive) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-surface px-6 py-16">
+        <section className="max-w-lg rounded-3xl border border-amber-100 bg-white p-8 text-center shadow-sm">
+          <p className="text-sm font-medium text-amber-700">Landing page belum live</p>
+          <h1 className="mt-3 text-3xl font-semibold text-on-surface">Publish dulu untuk buka live page</h1>
+          <p className="mt-3 text-sm leading-6 text-on-surface-variant">
+            Preview boleh dibuka bila-bila masa, tapi live URL hanya muncul selepas validation lulus dan status page menjadi Published.
+          </p>
+          <a href="#/website-builder/pages" className="mt-6 inline-flex rounded-full bg-primary px-5 py-3 text-sm text-on-primary">
+            Back to Builder
+          </a>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-white">
+      {mode === 'preview' && (
+        <div className="sticky top-0 z-20 bg-amber-300 px-5 py-2 text-center text-sm font-medium text-amber-950">
+          Draft preview. Publish to make the live URL available.
+        </div>
+      )}
+      {isWrongSlug && (
+        <div className="bg-surface-low px-5 py-2 text-center text-xs text-on-surface-variant">
+          Showing the current saved landing page draft.
+        </div>
+      )}
+      <div className="mx-auto w-full max-w-6xl">
+        {page.blocks.map((block) => (
+          <LandingRuntimeBlock key={block.id} block={block} onLeadSubmit={() => setSubmitted(true)} />
+        ))}
+      </div>
+      {submitted && (
+        <div className="fixed bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full bg-emerald-600 px-5 py-3 text-sm font-medium text-white shadow-lg">
+          Lead submitted. This is ready to connect to backend forms.
+        </div>
+      )}
+    </main>
+  );
+}
+
+function LandingRuntimeBlock({ block, onLeadSubmit }: { block: LandingBlock; onLeadSubmit: () => void }) {
+  if (block.hideDesktop) {
+    return null;
+  }
+
+  const style: React.CSSProperties = {
+    width: `${block.widthPercent}%`,
+    marginLeft: block.align === 'right' || block.align === 'center' ? 'auto' : undefined,
+    marginRight: block.align === 'left' || block.align === 'center' ? 'auto' : undefined,
+    paddingTop: block.paddingY,
+    paddingBottom: block.paddingY,
+    backgroundColor: block.backgroundColor || undefined,
+    color: block.textColor || undefined,
+  };
+  const alignClass = block.align === 'center' ? 'text-center' : block.align === 'right' ? 'text-right' : 'text-left';
+  const toneClass = block.tone === 'dark' ? 'bg-[#171717] text-white' : block.tone === 'brand' ? 'bg-primary text-on-primary' : block.tone === 'soft' ? 'bg-surface-low text-on-surface' : 'bg-white text-on-surface';
+
+  if (block.type === 'divider') {
+    return <section className="px-6" style={style}><div className="h-px w-full bg-on-surface/20" /></section>;
+  }
+
+  if (block.type === 'image') {
+    return (
+      <section className={`px-6 ${alignClass}`} style={style}>
+        <div className="grid min-h-72 place-items-center rounded-2xl bg-surface-low text-on-surface-variant">
+          <span>{block.imageName || 'Image placeholder'}</span>
+        </div>
+      </section>
+    );
+  }
+
+  if (block.type === 'video') {
+    return (
+      <section className="px-6" style={style}>
+        <a href={block.videoUrl || '#'} target="_blank" rel="noreferrer" className="grid aspect-video place-items-center rounded-2xl bg-black text-center text-white">
+          <span className="rounded-full bg-white/15 px-5 py-3">Play video</span>
+        </a>
+      </section>
+    );
+  }
+
+  if (block.type === 'columns') {
+    return (
+      <section className="grid gap-4 px-6" style={{ ...style, gridTemplateColumns: `repeat(${block.columns}, minmax(0, 1fr))` }}>
+        {Array.from({ length: block.columns }).map((_, index) => (
+          <div key={index} className="rounded-2xl border border-outline-variant/20 p-5 text-sm text-on-surface-variant">
+            {block.body}
+          </div>
+        ))}
+      </section>
+    );
+  }
+
+  if (block.type === 'html') {
+    return <section className="px-6" style={style} dangerouslySetInnerHTML={{ __html: block.html }} />;
+  }
+
+  if (block.type === 'timer') {
+    return (
+      <section className="px-6" style={style}>
+        <div className="bg-black p-6 text-center font-mono text-4xl text-white">07 : 15 : 59 : 56<div className="mt-2 grid grid-cols-4 text-xs font-sans"><span>Days</span><span>Hours</span><span>Minutes</span><span>Seconds</span></div></div>
+      </section>
+    );
+  }
+
+  if (block.type === 'button') {
+    return (
+      <section className={`px-6 ${alignClass}`} style={style}>
+        <button onClick={() => handleLandingAction(block)} className="rounded-full bg-primary px-8 py-4 text-sm font-semibold text-on-primary shadow-sm" type="button">
+          {block.buttonText}
+        </button>
+      </section>
+    );
+  }
+
+  if (block.type === 'form') {
+    return (
+      <section className={`px-6 ${alignClass} ${toneClass}`} style={style}>
+        <h2 className="text-3xl font-semibold">{block.title}</h2>
+        <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 opacity-80">{block.body}</p>
+        <form
+          className="mx-auto mt-6 grid max-w-xl gap-3 text-left"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onLeadSubmit();
+          }}
+        >
+          {block.formFields.map((field) => (
+            <input key={field} required className="rounded-xl border border-outline-variant/20 px-4 py-3 text-sm text-on-surface outline-none focus:border-primary" placeholder={field} />
+          ))}
+          <button className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary" type="submit">Submit</button>
+        </form>
+      </section>
+    );
+  }
+
+  if (block.type === 'menu') {
+    return (
+      <nav className={`flex flex-wrap justify-center gap-3 px-6 ${toneClass}`} style={style}>
+        {block.body.split('|').map((item) => <a key={item.trim()} href={`#${item.trim().toLowerCase().replace(/\s+/g, '-')}`} className="rounded-full border border-current/20 px-4 py-2 text-sm">{item.trim()}</a>)}
+      </nav>
+    );
+  }
+
+  return (
+    <section className={`px-6 ${alignClass} ${toneClass}`} style={style}>
+      <h1 className={`${block.type === 'heading' ? 'text-5xl' : 'text-3xl'} font-semibold`}>{block.title}</h1>
+      <p className="mx-auto mt-4 max-w-3xl whitespace-pre-line text-base leading-7 opacity-80">{block.body}</p>
+    </section>
+  );
+}
+
+function handleLandingAction(block: LandingBlock) {
+  const target = block.buttonTarget || block.buttonLink || '#';
+  if (block.buttonAction === 'whatsapp') {
+    window.open(`https://wa.me/${target.replace(/\D/g, '')}`, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  if (block.buttonAction === 'telegram' || block.buttonAction === 'url') {
+    window.open(target, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  if (block.buttonAction === 'checkout') {
+    window.location.hash = `/frontend/checkout/${target}`;
+    return;
+  }
+  document.querySelector('form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function loadLandingPageRuntime(): LandingPageDraft {
+  try {
+    const savedPage = localStorage.getItem(landingPageStorageKey);
+    return normalizeLandingPage(savedPage ? { ...createDefaultLandingPage(), ...JSON.parse(savedPage) } : createDefaultLandingPage());
+  } catch {
+    return createDefaultLandingPage();
+  }
+}
+
 function normalizeFrontendSection(section?: string): FrontendSection {
   if (
     section === 'overview' ||
@@ -762,6 +975,8 @@ function normalizeFrontendSection(section?: string): FrontendSection {
     section === 'account-orders' ||
     section === 'account-wishlist' ||
     section === 'account-addresses' ||
+    section === 'landing-page-preview' ||
+    section === 'landing-page' ||
     section === 'blog'
   ) {
     return section;

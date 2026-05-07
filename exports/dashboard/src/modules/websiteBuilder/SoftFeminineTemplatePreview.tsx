@@ -5,9 +5,9 @@ import { softFeminineTemplate } from './softFeminineTemplate';
 import type { LuxuryPreviewMode } from './LuxuryMuslimahTemplatePreview';
 import { normalizePreviewMode, getPreviewModeFromAction } from './LuxuryMuslimahTemplatePreview';
 import type { LuxuryTemplateProduct } from './luxuryMuslimahTemplate';
-import type { ThemeDraftContent } from './themeBuilderModel';
+import { normalizeSectionSettings, type ThemeDraftContent } from './themeBuilderModel';
 
-export const softFeminineHeroImage = 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=1300&q=80';
+export const softFeminineHeroImage = 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1300&q=80';
 
 const softImages = [
   softFeminineHeroImage,
@@ -117,9 +117,16 @@ function SoftStorefront({
   onOpenCart: () => void;
   onOpenProduct: () => void;
 }) {
+  const sectionSettings = normalizeSectionSettings(draftContent?.sections);
+  const sectionStyle = (key: string) => {
+    const index = sectionSettings.findIndex((section) => section.key === key);
+    const setting = sectionSettings[index];
+    return { order: index < 0 ? 0 : index, display: setting?.visible === false ? 'none' : undefined };
+  };
+
   return (
-    <>
-      <section ref={focusRefs.homepage} className={`grid items-center gap-8 bg-gradient-to-br from-[#fff9f4] via-[#f8e8df] to-[#efe0d6] px-6 ${editorPreview ? 'min-h-[520px] py-10' : 'min-h-[640px] py-16'} lg:grid-cols-[0.95fr_1.05fr]`}>
+    <div className="flex flex-col">
+      <section ref={focusRefs.homepage} style={sectionStyle('hero')} className={`grid items-center gap-8 bg-gradient-to-br from-[#fff9f4] via-[#f8e8df] to-[#efe0d6] px-6 ${editorPreview ? 'min-h-[520px] py-10' : 'min-h-[640px] py-16'} lg:grid-cols-[0.95fr_1.05fr]`}>
         <div>
           <p className="text-xs uppercase tracking-[0.32em] text-[#bc8f7f]">{draftContent?.announcementText ?? 'Soft Muse capsule now open'}</p>
           <h2 className={`mt-5 font-serif font-semibold leading-[1.02] text-[#3b2821] ${editorPreview ? 'text-5xl' : 'text-6xl'}`}>{draftContent?.heroHeading ?? 'Soft Feminine Luxury'}</h2>
@@ -132,9 +139,9 @@ function SoftStorefront({
           </div>
         </div>
         <div className="relative min-h-[440px]">
-          <img className="h-[440px] w-full rounded-[36px] object-cover shadow-2xl shadow-[#d6b4a7]/35" src={softFeminineHeroImage} alt="Soft feminine lifestyle" />
+          <PreviewImage className="h-[440px] w-full rounded-[36px] object-cover shadow-2xl shadow-[#d6b4a7]/35" src={softFeminineHeroImage} fallbackSrc={softImages[1]} alt="Soft feminine lifestyle" />
           <div className="absolute -bottom-5 left-7 w-64 rounded-[28px] bg-white/88 p-4 shadow-2xl backdrop-blur">
-            <img className="aspect-[4/3] w-full rounded-3xl object-cover" src={softFeminineTemplate.bestSellers[0].image} alt="Nude Satin Shawl" />
+            <PreviewImage className="aspect-[4/3] w-full rounded-3xl object-cover" src={softFeminineTemplate.bestSellers[0].image} fallbackSrc={softFeminineHeroImage} alt="Nude Satin Shawl" />
             <div className="mt-3 flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Nude Satin Shawl</p>
@@ -145,13 +152,13 @@ function SoftStorefront({
           </div>
         </div>
       </section>
-      <SoftCategories sectionRef={focusRefs.collections} collections={draftContent?.collections ?? softFeminineTemplate.collections} />
-      <SoftProductRail title="Best Seller Rituals" products={softFeminineTemplate.bestSellers} onOpenCart={onOpenCart} onOpenProduct={onOpenProduct} />
-      <LimitedCollection />
-      <SoftReviews />
-      <InspirationCollage />
-      <SoftNewsletter sectionRef={focusRefs.footer} />
-    </>
+      <div style={sectionStyle('collections')}><SoftCategories sectionRef={focusRefs.collections} collections={draftContent?.collections ?? softFeminineTemplate.collections} /></div>
+      <div style={sectionStyle('bestSellers')}><SoftProductRail title="Best Seller Rituals" products={softFeminineTemplate.bestSellers} onOpenCart={onOpenCart} onOpenProduct={onOpenProduct} /></div>
+      <div style={sectionStyle('bestSellers')}><LimitedCollection /></div>
+      <div style={sectionStyle('reviews')}><SoftReviews /></div>
+      <div style={sectionStyle('reviews')}><InspirationCollage /></div>
+      <div style={sectionStyle('newsletter')}><SoftNewsletter sectionRef={focusRefs.footer} /></div>
+    </div>
   );
 }
 
@@ -163,7 +170,7 @@ function SoftCategories({ sectionRef, collections }: { sectionRef: MutableRefObj
       <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {collections.map((item, index) => (
           <div key={item} className="rounded-[28px] bg-white p-3 shadow-sm">
-            <img className="aspect-[4/3] w-full rounded-[22px] object-cover" src={softImages[index % softImages.length]} alt={item} />
+            <PreviewImage className="aspect-[4/3] w-full rounded-[22px] object-cover" src={softImages[index % softImages.length]} fallbackSrc={softFeminineHeroImage} alt={item} />
             <p className="px-2 py-4 font-serif text-2xl font-semibold">{item}</p>
           </div>
         ))}
@@ -193,7 +200,7 @@ function SoftProductCard({ product, onOpenCart }: { product: LuxuryTemplateProdu
   return (
     <article className="group overflow-hidden rounded-[28px] bg-white shadow-sm">
       <div className="relative overflow-hidden">
-        <img className="aspect-[4/5] w-full object-cover transition-transform duration-700 group-hover:scale-105" src={product.image} alt={product.name} />
+        <PreviewImage className="aspect-[4/5] w-full object-cover transition-transform duration-700 group-hover:scale-105" src={product.image} fallbackSrc={softFeminineHeroImage} alt={product.name} />
         {product.badge && <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs text-[#765f55]">{product.badge}</span>}
         <button onClick={onOpenCart} className="absolute bottom-4 left-4 right-4 translate-y-4 rounded-full bg-[#3b2821] px-4 py-3 text-sm text-white opacity-0 transition-all group-hover:translate-y-0 group-hover:opacity-100">Quick add</button>
       </div>
@@ -220,7 +227,7 @@ function LimitedCollection() {
           {['02', '14', '38', '09'].map((time, index) => <div key={index} className="rounded-2xl bg-white p-3 text-center"><p className="text-xl font-semibold">{time}</p><p className="text-[10px] text-[#8c7467]">LEFT</p></div>)}
         </div>
       </div>
-      <img className="h-full min-h-[320px] rounded-[32px] object-cover" src={softImages[1]} alt="Limited collection" />
+      <PreviewImage className="h-full min-h-[320px] rounded-[32px] object-cover" src={softImages[1]} fallbackSrc={softFeminineHeroImage} alt="Limited collection" />
     </section>
   );
 }
@@ -246,13 +253,13 @@ function SoftReviews() {
 function InspirationCollage() {
   return (
     <section className="grid gap-4 px-6 py-14 lg:grid-cols-[1fr_0.8fr_1fr]">
-      <img className="h-full min-h-[360px] rounded-[32px] object-cover" src={softImages[0]} alt="Fashion inspiration" />
+      <PreviewImage className="h-full min-h-[360px] rounded-[32px] object-cover" src={softImages[0]} fallbackSrc={softImages[1]} alt="Fashion inspiration" />
       <div className="rounded-[32px] bg-[#3b2821] p-8 text-white">
         <p className="text-xs uppercase tracking-[0.3em] text-[#e7c2b6]">Outfit story</p>
         <h3 className="mt-4 font-serif text-4xl font-semibold">Warm looks for slow luxury days.</h3>
         <p className="mt-5 leading-8 text-white/70">Editorial image collage, outfit combinations, and lifestyle storytelling for emotional commerce.</p>
       </div>
-      <img className="h-full min-h-[360px] rounded-[32px] object-cover" src={softImages[5]} alt="Accessories inspiration" />
+      <PreviewImage className="h-full min-h-[360px] rounded-[32px] object-cover" src={softImages[5]} fallbackSrc={softFeminineHeroImage} alt="Accessories inspiration" />
     </section>
   );
 }
@@ -275,7 +282,7 @@ function SoftProductPage({ onOpenCart, onBuyNow }: { onOpenCart: () => void; onB
   return (
     <section className="grid gap-8 px-6 py-12 lg:grid-cols-[1.05fr_0.95fr]">
       <div className="grid gap-4 sm:grid-cols-2">
-        {[product.image, softImages[1], softImages[2], softImages[3]].map((image) => <img key={image} className="aspect-[4/5] rounded-[30px] object-cover" src={image} alt={product.name} />)}
+        {[product.image, softImages[1], softImages[2], softImages[3]].map((image) => <PreviewImage key={image} className="aspect-[4/5] rounded-[30px] object-cover" src={image} fallbackSrc={softFeminineHeroImage} alt={product.name} />)}
       </div>
       <div className="lg:sticky lg:top-24 lg:h-fit">
         <p className="text-xs uppercase tracking-[0.28em] text-[#bc8f7f]">{product.category}</p>
@@ -310,7 +317,7 @@ function SoftCartDrawer({ onClose }: { onClose: () => void }) {
         </div>
         <div className="flex-1 space-y-5 overflow-y-auto p-5">
           <div className="rounded-[28px] bg-white p-4 shadow-sm"><p className="text-sm font-medium">Free gift progress</p><div className="mt-3 h-2 overflow-hidden rounded-full bg-[#f2ded4]"><div className="h-full w-3/4 rounded-full bg-[#c48d7b]" /></div><p className="mt-2 text-xs text-[#765f55]">MYR 40 away from a free mini perfume.</p></div>
-          <div className="flex gap-4 rounded-[28px] bg-white p-4 shadow-sm"><img className="h-24 w-20 rounded-2xl object-cover" src={softFeminineTemplate.bestSellers[0].image} alt="Cart item" /><div className="min-w-0 flex-1"><p className="font-medium">Nude Satin Shawl</p><p className="mt-1 text-sm text-[#765f55]">Blush / M</p><div className="mt-3 flex w-fit items-center gap-3 rounded-full bg-[#fff0e9] px-3 py-1"><Minus className="h-3.5 w-3.5" /><span className="text-sm">1</span><Plus className="h-3.5 w-3.5" /></div></div><p className="text-sm">MYR 79</p></div>
+          <div className="flex gap-4 rounded-[28px] bg-white p-4 shadow-sm"><PreviewImage className="h-24 w-20 rounded-2xl object-cover" src={softFeminineTemplate.bestSellers[0].image} fallbackSrc={softFeminineHeroImage} alt="Cart item" /><div className="min-w-0 flex-1"><p className="font-medium">Nude Satin Shawl</p><p className="mt-1 text-sm text-[#765f55]">Blush / M</p><div className="mt-3 flex w-fit items-center gap-3 rounded-full bg-[#fff0e9] px-3 py-1"><Minus className="h-3.5 w-3.5" /><span className="text-sm">1</span><Plus className="h-3.5 w-3.5" /></div></div><p className="text-sm">MYR 79</p></div>
           <div className="rounded-[28px] bg-white p-4 shadow-sm"><p className="text-sm font-medium">Add-on bump</p><p className="mt-2 text-sm text-[#765f55]">Add Blush Ritual Lipmatte for MYR 39 only.</p></div>
           <div className="rounded-[28px] bg-white p-4 shadow-sm"><p className="text-sm font-medium">Bundle savings</p><p className="mt-2 text-sm text-[#765f55]">Shawl + Lipmatte + Perfume save 15%.</p></div>
         </div>
@@ -352,7 +359,7 @@ function SoftCheckout() {
             <p className="font-medium">Order Summary</p>
             {[softFeminineTemplate.bestSellers[0], softFeminineTemplate.bestSellers[1]].map((item) => (
               <div key={item.name} className="mt-5 flex gap-3">
-                <img className="h-20 w-16 object-cover" src={item.image} alt={item.name} />
+                <PreviewImage className="h-20 w-16 object-cover" src={item.image} fallbackSrc={softFeminineHeroImage} alt={item.name} />
                 <div className="min-w-0 flex-1"><p className="text-sm font-medium">{item.name}</p><p className="text-xs text-[#765f55]">{item.price}</p></div>
               </div>
             ))}
@@ -398,4 +405,14 @@ function SoftAccount() {
 
 function IconButton({ label, icon, onClick }: { label: string; icon: React.ReactNode; onClick?: () => void }) {
   return <button onClick={onClick} className="rounded-full bg-white p-2 shadow-sm transition-transform hover:-translate-y-0.5" aria-label={label} title={label}>{icon}</button>;
+}
+
+function PreviewImage({ src, fallbackSrc, alt, className }: { src: string; fallbackSrc: string; alt: string; className: string }) {
+  const [imageSrc, setImageSrc] = useState(src);
+
+  useEffect(() => {
+    setImageSrc(src);
+  }, [src]);
+
+  return <img className={className} src={imageSrc} alt={alt} onError={() => setImageSrc(fallbackSrc)} />;
 }

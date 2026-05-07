@@ -62,6 +62,21 @@
   - `soft-feminine-luxe` / Aurelia Muse: soft feminine emotional luxury commerce.
   - `modern-conversion-luxe` / Lumiere Momentum: modern minimal luxury, urgency, trust, and conversion-focused ecommerce.
 
+## Website Builder Pages Flow
+- Pages is a manual landing page builder for sales pages and lead pages, inspired by Shoppegram-style drag/drop builders.
+- Pages must feel like a CMS/page canvas, not a theme template placeholder.
+- Core layout: left vertical tabs for Blocks, Body, and Images; center canvas with drop zones; selected block settings panel in the left workspace.
+- Supported manual blocks: Columns, Button, Divider, Heading, HTML, Image, Menu, Text, Timer, Video, and Lead Form.
+- Admin can add blocks by click or drag/drop, insert between blocks, reorder, duplicate, delete, and edit block copy/settings.
+- Body settings must control real preview output: title/body, HTML/embed code, column count, video URL, countdown end time, button action, form fields, alignment, tone, width, vertical padding, colors, and desktop/mobile visibility.
+- Image settings must include upload-style file picker, image URL/name, alignment, and alternate text.
+- Button actions must support URL, checkout target, WhatsApp, Telegram, and lead form anchor.
+- Pages must include desktop/mobile preview modes inside the canvas; device mode changes canvas width and honors hide-on-device toggles.
+- Publish must validate readiness before marking a page live: title, slug, required CTA targets, image values, video URLs, and lead form fields.
+- Preview opens the current draft landing page in a new tab through `#/frontend/landing-page-preview/[slug]`, even before publish.
+- Published landing pages open through `#/frontend/landing-page/[slug]`; this live route should only render when the saved page status is Published and validation passes.
+- Current Pages draft is saved in localStorage until backend persistence/upload is connected.
+
 ## Current Admin Routes Implemented
 - /dashboard
 - /orders

@@ -23,7 +23,17 @@ export interface ThemeDraftContent {
   heroSubtitle: string;
   heroImageName: string;
   collections: string[];
+  sections: ThemeSectionSetting[];
   checkoutNote: string;
+}
+
+export type ThemeSectionLayout = 'default' | 'centered' | 'imageFirst' | 'compactGrid' | 'featureGrid';
+
+export interface ThemeSectionSetting {
+  key: string;
+  label: string;
+  visible: boolean;
+  layout: ThemeSectionLayout;
 }
 
 export type BuilderDevice = 'mobile' | 'tablet' | 'desktop';
@@ -54,8 +64,59 @@ export function createDefaultThemeDraft(): ThemeDraftContent {
     heroSubtitle: 'Editorial modestwear, perfume, beauty and feminine rituals composed for soft luxury living.',
     heroImageName: '',
     collections: ['Abaya', 'Tudung', 'Dresses', 'Perfume', 'Lipmatte', 'New Arrivals'],
+    sections: createDefaultSectionSettings(),
     checkoutNote: 'Secure checkout with online banking, card, COD, and e-wallet options.',
   };
+}
+
+export function createDefaultSectionSettings(): ThemeSectionSetting[] {
+  return [
+    { key: 'hero', label: 'Hero', visible: true, layout: 'default' },
+    { key: 'collections', label: 'Categories', visible: true, layout: 'default' },
+    { key: 'bestSellers', label: 'Best Sellers', visible: true, layout: 'default' },
+    { key: 'reviews', label: 'Reviews', visible: true, layout: 'default' },
+    { key: 'newsletter', label: 'Newsletter', visible: true, layout: 'default' },
+  ];
+}
+
+export function normalizeSectionSettings(sections?: ThemeSectionSetting[]): ThemeSectionSetting[] {
+  const savedByKey = new Map((sections ?? []).map((section) => [section.key, section]));
+  const defaults = createDefaultSectionSettings();
+  const merged = defaults.map((section) => ({ ...section, ...savedByKey.get(section.key), key: section.key, label: section.label }));
+  const knownKeys = new Set(defaults.map((section) => section.key));
+  const savedOrder = (sections ?? []).map((section) => section.key).filter((key) => knownKeys.has(key));
+  return [
+    ...savedOrder.map((key) => merged.find((section) => section.key === key)).filter((section): section is ThemeSectionSetting => Boolean(section)),
+    ...merged.filter((section) => !savedOrder.includes(section.key)),
+  ];
+}
+
+export function setSectionLayout(draft: ThemeDraftContent, sectionKey: string, layout: ThemeSectionLayout): ThemeDraftContent {
+  return {
+    ...draft,
+    sections: normalizeSectionSettings(draft.sections).map((section) => (section.key === sectionKey ? { ...section, layout } : section)),
+  };
+}
+
+export function toggleSectionVisibility(draft: ThemeDraftContent, sectionKey: string): ThemeDraftContent {
+  return {
+    ...draft,
+    sections: normalizeSectionSettings(draft.sections).map((section) => (section.key === sectionKey ? { ...section, visible: !section.visible } : section)),
+  };
+}
+
+export function moveSectionSetting(draft: ThemeDraftContent, sectionKey: string, direction: 'up' | 'down'): ThemeDraftContent {
+  const sections = normalizeSectionSettings(draft.sections);
+  const currentIndex = sections.findIndex((section) => section.key === sectionKey);
+  const nextIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= sections.length) {
+    return { ...draft, sections };
+  }
+
+  const nextSections = [...sections];
+  [nextSections[currentIndex], nextSections[nextIndex]] = [nextSections[nextIndex], nextSections[currentIndex]];
+  return { ...draft, sections: nextSections };
 }
 
 export function installTheme(workspace: ThemeWorkspace, themeId: string): ThemeWorkspace {
