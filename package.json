@@ -1,0 +1,10 @@
+{
+  "name": "bisora",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix exports/dashboard run dev",
+    "build": "npm --prefix exports/dashboard run build",
+    "preview": "npm --prefix exports/dashboard run preview",
+    "lint": "npm --prefix exports/dashboard run lint"
+  }
+}
