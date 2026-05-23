@@ -34,7 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import { categories, productKpiMetrics, products } from './data';
-import { loadProducts, saveProducts } from '../storefront/productStore';
+import { saveProductToApi, useStorefrontProducts } from '../storefront/productStore';
 import { ProductStatusBadge } from './ProductStatusBadge';
 import type { Category, CategoryDetailTab, Product, ProductTab, StockState } from './types';
 
@@ -67,12 +67,8 @@ const categoryDetailTabs: CategoryDetailTab[] = ['Category', 'Category Products'
 export function ProductsModule({ section, id, subSection }: ProductsModuleProps) {
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [dialog, setDialog] = useState<ActionDialogState | null>(null);
-  const [productRecords, setProductRecords] = useState<Product[]>(loadProducts);
+  const [productRecords, setProductRecords] = useStorefrontProducts();
   const [categoryRecords, setCategoryRecords] = useState<Category[]>(categories);
-
-  useEffect(() => {
-    saveProducts(productRecords);
-  }, [productRecords]);
 
   useEffect(() => {
     if (!banner) return undefined;
@@ -104,6 +100,11 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
               ? [record, ...current.filter((item) => item.id !== record.id)]
               : current.map((item) => (item.id === record.id ? record : item));
             return nextRecords;
+          });
+          void saveProductToApi(record, isNewProduct).then((savedRecord) => {
+            setProductRecords((current) =>
+              current.map((item) => (item.id === record.id ? savedRecord : item)),
+            );
           });
           showBanner('Product saved', `${record.title} SEO, slug, and product changes were saved.`);
           if (isNewProduct) {
@@ -996,6 +997,7 @@ function EditProductStudio({
   const [showVideoModal, setShowVideoModal] = useState(false);
   const descriptionRef = useRef<HTMLDivElement | null>(null);
   const descriptionSelectionRef = useRef<Range | null>(null);
+  const descriptionToolbarRef = useRef<HTMLDivElement | null>(null);
   const [selectedTextColor, setSelectedTextColor] = useState('#000000');
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [slugNotice, setSlugNotice] = useState('');
@@ -1255,16 +1257,18 @@ function EditProductStudio({
   };
   const applyDescriptionTextColor = (color: string) => {
     setSelectedTextColor(color);
-    runDescriptionCommand('styleWithCSS', 'true');
-    runDescriptionCommand('foreColor', color);
+    focusDescriptionEditor();
+    document.execCommand('styleWithCSS', false, 'true');
+    document.execCommand('foreColor', false, color);
+    syncDescriptionFromEditor();
+    saveDescriptionSelection();
     setOpenDescriptionMenu(null);
   };
   const handleInsertLink = () => {
     focusDescriptionEditor();
-    if (pendingLinkLabel) {
-      document.execCommand('insertText', false, pendingLinkLabel);
-    }
-    document.execCommand('createLink', false, pendingLinkUrl || 'https://');
+    const href = pendingLinkUrl.trim() || 'https://';
+    const label = pendingLinkLabel.trim() || window.getSelection()?.toString().trim() || href;
+    insertDescriptionHtml(`<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`);
     syncDescriptionFromEditor();
     saveDescriptionSelection();
     setPendingLinkUrl('');
@@ -1349,6 +1353,17 @@ function EditProductStudio({
       descriptionRef.current.innerHTML = form.description;
     }
   }, [descriptionHtmlMode, form.description]);
+
+  useEffect(() => {
+    const handleOutsideToolbarClick = (event: MouseEvent) => {
+      if (!descriptionToolbarRef.current) return;
+      if (descriptionToolbarRef.current.contains(event.target as Node)) return;
+      setOpenDescriptionMenu(null);
+    };
+
+    document.addEventListener('mousedown', handleOutsideToolbarClick);
+    return () => document.removeEventListener('mousedown', handleOutsideToolbarClick);
+  }, []);
 
   useEffect(() => {
     if (!builtVariantRows.some((variant) => variant.name === selectedVariantName) && builtVariantRows[0]) {
@@ -1437,7 +1452,7 @@ function EditProductStudio({
               <label className="block space-y-2 text-sm font-medium">
                 <span>Description</span>
                 <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2" ref={descriptionToolbarRef}>
                     <ToolbarButton icon={<Bold className="h-4 w-4" />} title="Bold" onClick={() => runDescriptionCommand('bold')} />
                     <ToolbarButton icon={<Italic className="h-4 w-4" />} title="Italic" onClick={() => runDescriptionCommand('italic')} />
                     <ToolbarButton icon={<Strikethrough className="h-4 w-4" />} title="Strikethrough" onClick={() => runDescriptionCommand('strikeThrough')} />
@@ -1635,6 +1650,7 @@ function EditProductStudio({
                           <div className="flex items-center gap-3">
                             <button
                               className="h-12 w-12 rounded border border-outline-variant/20"
+                              onMouseDown={preventToolbarMouseDown}
                               style={{ backgroundColor: selectedTextColor }}
                               type="button"
                             />
@@ -1669,6 +1685,7 @@ function EditProductStudio({
                             <button
                               key={color}
                               className="h-8 rounded border border-outline-variant/20"
+                              onMouseDown={preventToolbarMouseDown}
                               onClick={() => applyDescriptionTextColor(color)}
                               style={{ backgroundColor: color }}
                               type="button"
@@ -2609,6 +2626,7 @@ function ToolbarButton({
       className={`rounded border border-outline-variant/30 px-3 py-2 text-xs font-semibold ${
         active ? 'bg-primary text-on-primary' : 'bg-surface hover:bg-surface-low'
       }`}
+      onMouseDown={preventToolbarMouseDown}
       onClick={onClick}
       title={title}
       type="button"
@@ -2655,7 +2673,12 @@ function ToolbarMenu({
 
 function ToolbarMenuButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-surface-low" onClick={onClick} type="button">
+    <button
+      className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-surface-low"
+      onMouseDown={preventToolbarMouseDown}
+      onClick={onClick}
+      type="button"
+    >
       {label}
     </button>
   );
@@ -2733,6 +2756,10 @@ function SummaryRow({ label, children }: { label: string; children: ReactNode })
       <div className="mt-1">{children}</div>
     </div>
   );
+}
+
+function preventToolbarMouseDown(event: React.MouseEvent) {
+  event.preventDefault();
 }
 
 function normalizeCategoryTab(subSection?: string): CategoryDetailTab {
