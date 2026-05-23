@@ -19,6 +19,8 @@ import {
   Truck,
   X,
 } from 'lucide-react';
+import { API_STORAGE_KEYS } from '../../api/http';
+import { fetchOrders } from '../../api/commerce';
 import { orderKpiMetrics, orders } from './data';
 import type { Order } from './types';
 import { BulkShipmentModal } from './BulkShipmentModal';
@@ -168,7 +170,13 @@ const sellerFulfillmentStages: SellerFulfillmentStage[] = [
   'Completed',
 ];
 
+function hasApiToken() {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.localStorage.getItem(API_STORAGE_KEYS.token));
+}
+
 export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps) {
+  const [orderRecords, setOrderRecords] = useState<Order[]>(orders);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [showBulkShipment, setShowBulkShipment] = useState(false);
   const [actionDialog, setActionDialog] = useState<ActionDialogState | null>(null);
@@ -178,19 +186,34 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
   const [manualTrackingMap, setManualTrackingMap] = useState<Record<string, ManualTrackingState>>({});
   const [fulfillmentStageMap, setFulfillmentStageMap] = useState<Record<string, SellerFulfillmentStage>>({});
   const [orderTimelineMap, setOrderTimelineMap] = useState<Record<string, OrderTimelineEntry[]>>(() =>
-    Object.fromEntries(orders.map((order) => [order.id, createOrderTimelineSeed(order)])),
+    Object.fromEntries(orderRecords.map((order) => [order.id, createOrderTimelineSeed(order)])),
   );
 
   const selectedOrders = useMemo(
-    () => orders.filter((order) => selectedOrderIds.includes(order.id)),
-    [selectedOrderIds],
+    () => orderRecords.filter((order) => selectedOrderIds.includes(order.id)),
+    [orderRecords, selectedOrderIds],
   );
 
   const selectedOrder = orderId
-    ? orders.find((order) => routeId(order.id) === orderId)
+    ? orderRecords.find((order) => routeId(order.id) === orderId)
     : undefined;
 
   const activeTab = normalizeOrdersTab(section);
+
+  useEffect(() => {
+    if (!hasApiToken()) return;
+
+    fetchOrders()
+      .then((items) => {
+        if (items.length > 0) {
+          setOrderRecords(items);
+          setOrderTimelineMap(Object.fromEntries(items.map((order) => [order.id, createOrderTimelineSeed(order)])));
+        }
+      })
+      .catch(() => {
+        // Keep bundled demo orders available when backend is offline.
+      });
+  }, []);
 
   useEffect(() => {
     if (!banner) {
@@ -220,7 +243,7 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
 
   const appendTimelineEntry = (currentOrderId: string, entry: Omit<OrderTimelineEntry, 'id' | 'timestamp'>) => {
     setOrderTimelineMap((current) => {
-      const currentOrder = orders.find((item) => item.id === currentOrderId);
+      const currentOrder = orderRecords.find((item) => item.id === currentOrderId);
       const existingEntries = current[currentOrderId] ?? (currentOrder ? createOrderTimelineSeed(currentOrder) : []);
 
       return {
@@ -433,6 +456,7 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
               });
             }}
             onSelectionChange={setSelectedOrderIds}
+            orders={orderRecords}
           />
         </OrdersShell>
       )}
@@ -563,6 +587,7 @@ function OrdersShell({
 }
 
 function OrdersListPage({
+  orders,
   selectedOrderIds,
   onSelectionChange,
   onOpenOrder,
@@ -571,6 +596,7 @@ function OrdersListPage({
   onMarkSelectedShipped,
   onDeleteSelected,
 }: {
+  orders: Order[];
   selectedOrderIds: string[];
   onSelectionChange: (ids: string[]) => void;
   onOpenOrder: (orderId: string) => void;

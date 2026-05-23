@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowLeft, CheckCircle2, Mail, MoreHorizontal, Plus, Search, Star, X } from 'lucide-react';
+import { API_STORAGE_KEYS } from '../../api/http';
+import { fetchCustomers, fetchReviews, updateReviewStatus as updateReviewStatusApi } from '../../api/commerce';
 import { initialCustomers, initialReviews } from './data';
 import type { Customer, CustomerOrderHistory, CustomerTag, ReviewRecord, ReviewStatus } from './types';
 
@@ -18,6 +20,11 @@ type CustomerActionMode = 'create' | 'edit';
 
 const customerTabs = ['All Customers', 'Reviews'] as const;
 
+function hasApiToken() {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.localStorage.getItem(API_STORAGE_KEYS.token));
+}
+
 export function CustomersModule({ section, customerId }: CustomersModuleProps) {
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
   const [reviews, setReviews] = useState<ReviewRecord[]>(initialReviews);
@@ -33,6 +40,30 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
   const selectedReview = showModerationReviewId ? reviews.find((review) => review.id === showModerationReviewId) : undefined;
   const trimmedNoteDraft = noteDraft.trim();
 
+  useEffect(() => {
+    if (!hasApiToken()) return;
+
+    fetchCustomers()
+      .then((items) => {
+        if (items.length > 0) {
+          setCustomers(items);
+        }
+      })
+      .catch(() => {
+        // Keep bundled demo customers available when backend is offline.
+      });
+
+    fetchReviews()
+      .then((items) => {
+        if (items.length > 0) {
+          setReviews(items);
+        }
+      })
+      .catch(() => {
+        // Keep bundled demo reviews available when backend is offline.
+      });
+  }, []);
+
   const showBanner = (title: string, description: string) => {
     setBanner({ title, description });
     window.setTimeout(() => setBanner(null), 2600);
@@ -40,6 +71,16 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
 
   const updateReviewStatus = (reviewId: string, status: ReviewStatus) => {
     setReviews((current) => current.map((review) => (review.id === reviewId ? { ...review, status } : review)));
+
+    if (hasApiToken()) {
+      updateReviewStatusApi(reviewId, status)
+        .then((updatedReview) => {
+          setReviews((current) => current.map((review) => (review.id === reviewId ? updatedReview : review)));
+        })
+        .catch(() => {
+          // Optimistic review moderation remains visible until next backend sync.
+        });
+    }
   };
 
   const removeReview = (reviewId: string) => {
