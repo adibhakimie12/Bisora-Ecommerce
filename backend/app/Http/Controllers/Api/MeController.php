@@ -1,0 +1,28 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class MeController extends Controller
+{
+    public function __invoke(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'is_platform_owner' => $user->isPlatformOwner(),
+            ],
+            'tenants' => $user->tenants()
+                ->select('tenants.id', 'tenants.name', 'tenants.slug', 'tenants.plan', 'tenants.access_status')
+                ->orderBy('tenants.name')
+                ->get(),
+        ]);
+    }
+}
