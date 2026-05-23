@@ -1,3 +1,5 @@
+import { getStoredSession } from '../../api/authSession';
+
 const DEFAULT_OWNER_EMAIL = 'owner@bisora.my';
 
 function getRuntimeEnv(): Record<string, string | undefined> {
@@ -17,5 +19,5 @@ export function canAccessSuperadmin(currentEmail: string | undefined, ownerEmail
 }
 
 export function getCurrentAdminEmail() {
-  return getRuntimeEnv().VITE_CURRENT_ADMIN_EMAIL || 'owner@bisora.my';
+  return getStoredSession()?.user.email || getRuntimeEnv().VITE_CURRENT_ADMIN_EMAIL || '';
 }

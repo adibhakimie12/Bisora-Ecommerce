@@ -1,6 +1,8 @@
 export const API_STORAGE_KEYS = {
   token: 'bisora.apiToken',
   tenantId: 'bisora.tenantId',
+  user: 'bisora.user',
+  tenants: 'bisora.tenants',
 } as const;
 
 type ApiStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -136,6 +138,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
           body: JSON.stringify(credentials),
         });
         storage?.setItem(API_STORAGE_KEYS.token, result.token);
+        storage?.setItem(API_STORAGE_KEYS.user, JSON.stringify(result.user));
+        storage?.setItem(API_STORAGE_KEYS.tenants, JSON.stringify(result.tenants));
 
         const firstTenant = result.tenants[0];
         if (firstTenant) {
@@ -148,6 +152,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
         await request<void>('/auth/logout', { method: 'POST' });
         storage?.removeItem(API_STORAGE_KEYS.token);
         storage?.removeItem(API_STORAGE_KEYS.tenantId);
+        storage?.removeItem(API_STORAGE_KEYS.user);
+        storage?.removeItem(API_STORAGE_KEYS.tenants);
       },
     },
     catalog: {
