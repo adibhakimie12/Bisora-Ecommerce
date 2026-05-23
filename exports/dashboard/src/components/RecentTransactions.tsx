@@ -1,7 +1,14 @@
 import { MoreHorizontal } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { fetchDashboardAnalytics } from '../api/analytics';
+import { API_STORAGE_KEYS } from '../api/http';
 import { recentTransactions } from '../data';
 import type { Transaction } from '../types';
+
+function hasApiToken() {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.localStorage.getItem(API_STORAGE_KEYS.token));
+}
 
 export function RecentTransactions() {
   const [transactions, setTransactions] = useState(recentTransactions);
@@ -9,6 +16,20 @@ export function RecentTransactions() {
   const [notice, setNotice] = useState<string | null>(null);
   const [archiveCandidateId, setArchiveCandidateId] = useState<string | null>(null);
   const [lastArchived, setLastArchived] = useState<{ transaction: Transaction; index: number } | null>(null);
+
+  useEffect(() => {
+    if (!hasApiToken()) return;
+
+    fetchDashboardAnalytics()
+      .then((dashboard) => {
+        if (dashboard.recentTransactions.length > 0) {
+          setTransactions(dashboard.recentTransactions);
+        }
+      })
+      .catch(() => {
+        // Keep bundled transaction list available when backend is offline.
+      });
+  }, []);
 
   useEffect(() => {
     const closeMenu = () => setActiveMenuId(null);

@@ -1,11 +1,31 @@
 import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { fetchDashboardAnalytics } from '../api/analytics';
+import { API_STORAGE_KEYS } from '../api/http';
 import { kpiMetrics } from '../data';
 import type { KpiMetric } from '../types';
 
+function hasApiToken() {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.localStorage.getItem(API_STORAGE_KEYS.token));
+}
+
 export function KpiGrid() {
+  const [metrics, setMetrics] = useState<KpiMetric[]>(kpiMetrics);
+
+  useEffect(() => {
+    if (!hasApiToken()) return;
+
+    fetchDashboardAnalytics()
+      .then((dashboard) => setMetrics(dashboard.metrics))
+      .catch(() => {
+        // Keep bundled dashboard KPIs available when backend is offline.
+      });
+  }, []);
+
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Key performance indicators">
-      {kpiMetrics.map((metric) => (
+      {metrics.map((metric) => (
         <KpiCard key={metric.label} metric={metric} />
       ))}
     </section>

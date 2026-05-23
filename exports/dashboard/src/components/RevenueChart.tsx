@@ -1,13 +1,36 @@
 import { useMemo, useState } from 'react';
+import { useEffect } from 'react';
+import { fetchDashboardAnalytics } from '../api/analytics';
+import { API_STORAGE_KEYS } from '../api/http';
 import { monthlyRevenue, weeklyRevenue } from '../data';
 import type { RevenuePoint } from '../types';
 
 type RevenueRange = 'Monthly' | 'Weekly';
 
+function hasApiToken() {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.localStorage.getItem(API_STORAGE_KEYS.token));
+}
+
 export function RevenueChart() {
   const [range, setRange] = useState<RevenueRange>('Monthly');
-  const data = range === 'Monthly' ? monthlyRevenue : weeklyRevenue;
+  const [liveRevenue, setLiveRevenue] = useState<RevenuePoint[] | null>(null);
+  const data = liveRevenue ?? (range === 'Monthly' ? monthlyRevenue : weeklyRevenue);
   const maxRevenue = useMemo(() => Math.max(...data.map((point) => point.revenue)), [data]);
+
+  useEffect(() => {
+    if (!hasApiToken()) return;
+
+    fetchDashboardAnalytics()
+      .then((dashboard) => {
+        if (dashboard.revenueTrend.length > 0) {
+          setLiveRevenue(dashboard.revenueTrend);
+        }
+      })
+      .catch(() => {
+        // Keep bundled revenue chart available when backend is offline.
+      });
+  }, []);
 
   return (
     <section className="rounded border border-outline-variant/20 bg-surface-lowest p-5">
@@ -33,7 +56,7 @@ export function RevenueChart() {
         </div>
       </div>
 
-      <BarChart data={data} maxRevenue={maxRevenue} />
+        <BarChart data={data} maxRevenue={Math.max(maxRevenue, 1)} />
     </section>
   );
 }

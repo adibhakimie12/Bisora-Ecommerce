@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Download, Search, Sparkles } from 'lucide-react';
+import { fetchReportsOverview } from '../../api/analytics';
+import { API_STORAGE_KEYS } from '../../api/http';
 import {
   dateRows,
   financeKpis,
@@ -99,10 +101,19 @@ const reportsSectionGroups: ReportsSectionGroup[] = [
   },
 ];
 
+function hasApiToken() {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.localStorage.getItem(API_STORAGE_KEYS.token));
+}
+
 export function ReportsModule({ section }: ReportsModuleProps) {
   const activeView = normalizeReportsSection(section);
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [actions, setActions] = useState(recommendedActionsSeed);
+  const [liveOverviewMetrics, setLiveOverviewMetrics] = useState(overviewMetrics);
+  const [liveRevenuePerformance, setLiveRevenuePerformance] = useState(revenuePerformance);
+  const [liveTopProducts, setLiveTopProducts] = useState(topProducts);
+  const [liveFinanceKpis, setLiveFinanceKpis] = useState(financeKpis);
 
   useEffect(() => {
     if (!banner) {
@@ -111,6 +122,25 @@ export function ReportsModule({ section }: ReportsModuleProps) {
     const timeout = window.setTimeout(() => setBanner(null), 2600);
     return () => window.clearTimeout(timeout);
   }, [banner]);
+
+  useEffect(() => {
+    if (!hasApiToken()) return;
+
+    fetchReportsOverview()
+      .then((reports) => {
+        setLiveOverviewMetrics(reports.overviewMetrics);
+        if (reports.revenuePerformance.length > 0) {
+          setLiveRevenuePerformance(reports.revenuePerformance);
+        }
+        if (reports.topProducts.length > 0) {
+          setLiveTopProducts(reports.topProducts);
+        }
+        setLiveFinanceKpis(reports.financeKpis);
+      })
+      .catch(() => {
+        // Keep bundled report data available when backend is offline.
+      });
+  }, []);
 
   const notify = (title: string, description: string) => setBanner({ title, description });
 
@@ -134,15 +164,18 @@ export function ReportsModule({ section }: ReportsModuleProps) {
             <AnalyticsWorkspace
               activeTab={activeView.tab as ReportsTab}
               actions={actions}
+              overviewMetrics={liveOverviewMetrics}
               onExecuteAction={(id) =>
                 setActions((current) =>
                   current.map((action) => (action.id === id ? { ...action, status: 'Executed' } : action)),
                 )
               }
               onNotify={notify}
+              revenuePerformance={liveRevenuePerformance}
+              topProducts={liveTopProducts}
             />
           ) : (
-            <FinanceWorkspace activeTab={activeView.tab as FinanceTab} onNotify={notify} />
+            <FinanceWorkspace activeTab={activeView.tab as FinanceTab} financeKpis={liveFinanceKpis} onNotify={notify} />
           )}
         </div>
       </div>
@@ -208,13 +241,19 @@ function ReportsSectionNav({ activeView }: { activeView: ActiveReportsView }) {
 function AnalyticsWorkspace({
   activeTab,
   actions,
+  overviewMetrics,
   onExecuteAction,
   onNotify,
+  revenuePerformance,
+  topProducts,
 }: {
   activeTab: ReportsTab;
   actions: RecommendedAction[];
+  overviewMetrics: ReportsMetric[];
   onExecuteAction: (id: string) => void;
   onNotify: (title: string, description: string) => void;
+  revenuePerformance: RevenuePoint[];
+  topProducts: TopProduct[];
 }) {
   return (
     <div className="space-y-6">
@@ -247,6 +286,9 @@ function AnalyticsWorkspace({
         <OverviewTab
           onExport={() => onNotify('Overview exported', 'High-level report export is ready.')}
           onRunInsight={() => onNotify('AI insight refreshed', 'New recommendations were generated from latest data.')}
+          overviewMetrics={overviewMetrics}
+          revenuePerformance={revenuePerformance}
+          topProducts={topProducts}
         />
       ) : null}
 
@@ -282,9 +324,11 @@ function AnalyticsWorkspace({
 
 function FinanceWorkspace({
   activeTab,
+  financeKpis,
   onNotify,
 }: {
   activeTab: FinanceTab;
+  financeKpis: FinanceKpi[];
   onNotify: (title: string, description: string) => void;
 }) {
   const [viewMode, setViewMode] = useState<FinanceViewMode>('basic');
@@ -299,7 +343,7 @@ function FinanceWorkspace({
 
       <FinanceExperienceBar activeTab={activeTab} viewMode={viewMode} onChangeViewMode={setViewMode} />
 
-      <FinanceSummaryStrip />
+      <FinanceSummaryStrip financeKpis={financeKpis} />
 
       {activeTab === 'transactions' ? (
         <TransactionsFinanceTab
@@ -405,7 +449,7 @@ function SectionHero({
   );
 }
 
-function FinanceSummaryStrip() {
+function FinanceSummaryStrip({ financeKpis }: { financeKpis: FinanceKpi[] }) {
   return (
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {financeKpis.map((metric) => (
@@ -1135,9 +1179,15 @@ function ReconciliationFinanceTab({
 function OverviewTab({
   onExport,
   onRunInsight,
+  overviewMetrics,
+  revenuePerformance,
+  topProducts,
 }: {
   onExport: () => void;
   onRunInsight: () => void;
+  overviewMetrics: ReportsMetric[];
+  revenuePerformance: RevenuePoint[];
+  topProducts: TopProduct[];
 }) {
   const [selectedRange, setSelectedRange] = useState<'Last 7 Days' | 'Last 30 Days' | 'Last 90 Days'>('Last 30 Days');
 

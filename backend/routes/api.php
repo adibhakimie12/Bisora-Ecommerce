@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\MeController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CustomerController;
@@ -34,6 +35,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/categories', [CategoryController::class, 'store']);
         Route::post('/media/presign', [MediaController::class, 'presign']);
         Route::post('/media/complete', [MediaController::class, 'complete']);
+        Route::get('/dashboard', [AnalyticsController::class, 'dashboard']);
+        Route::get('/reports/overview', [AnalyticsController::class, 'reportsOverview']);
         Route::get('/customers', [CustomerController::class, 'index']);
         Route::get('/customers/{customer}', [CustomerController::class, 'show']);
         Route::get('/orders', [OrderController::class, 'index']);
