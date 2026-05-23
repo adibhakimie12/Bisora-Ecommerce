@@ -59,7 +59,7 @@ export class ApiError extends Error {
   }
 }
 
-interface ApiClientOptions {
+export interface ApiClientOptions {
   baseUrl?: string;
   token?: string;
   tenantId?: string;

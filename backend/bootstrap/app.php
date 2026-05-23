@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'tenant' => \App\Http\Middleware\ResolveTenant::class,
+            'platform-owner' => \App\Http\Middleware\EnsurePlatformOwner::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

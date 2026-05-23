@@ -1,5 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Ban, RotateCcw, XCircle } from 'lucide-react';
+import { API_STORAGE_KEYS } from '../../api/http';
+import {
+  fetchGateways,
+  fetchPackages,
+  fetchTenants,
+  grantTenantFreeAccess as grantTenantFreeAccessApi,
+  saveGateway,
+  savePackage,
+  updateTenantAccess as updateTenantAccessApi,
+} from '../../api/superadmin';
 import {
   applyPackageDiscount,
   canTerminateTenant,
@@ -22,6 +32,11 @@ const tabs: Array<{ key: SuperadminSection; label: string }> = [
   { key: 'integrations', label: 'Integrations' },
   { key: 'access', label: 'Access Control' },
 ];
+
+function hasApiToken() {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.localStorage.getItem(API_STORAGE_KEYS.token));
+}
 
 export function SuperadminModule({ section }: { section?: string }) {
   const activeSection = normalizeSection(section);
@@ -61,6 +76,20 @@ export function SuperadminModule({ section }: { section?: string }) {
     },
   ]);
 
+  useEffect(() => {
+    if (!hasApiToken()) return;
+
+    fetchTenants()
+      .then((items) => {
+        if (items.length > 0) {
+          setTenants(items);
+        }
+      })
+      .catch(() => {
+        // Keep demo data usable when backend credentials are not ready.
+      });
+  }, []);
+
   const totals = useMemo(() => {
     const active = tenants.filter((tenant) => tenant.accessStatus === 'Active').length;
     const suspended = tenants.filter((tenant) => tenant.accessStatus === 'Suspended').length;
@@ -82,12 +111,32 @@ export function SuperadminModule({ section }: { section?: string }) {
           : tenant,
       ),
     );
+
+    if (hasApiToken()) {
+      updateTenantAccessApi(tenantId, accessStatus)
+        .then((updatedTenant) => {
+          setTenants((current) => current.map((tenant) => (tenant.id === tenantId ? updatedTenant : tenant)));
+        })
+        .catch(() => {
+          // Optimistic state remains; next load will reconcile with backend.
+        });
+    }
   };
 
   const grantTenantFreeAccess = (tenantId: string, ownerEmail: string, packageName: string) => {
     setTenants((current) =>
       current.map((tenant) => (tenant.id === tenantId ? grantFreeAccess(tenant, ownerEmail, packageName) : tenant)),
     );
+
+    if (hasApiToken()) {
+      grantTenantFreeAccessApi(tenantId, ownerEmail, packageName)
+        .then((updatedTenant) => {
+          setTenants((current) => current.map((tenant) => (tenant.id === tenantId ? updatedTenant : tenant)));
+        })
+        .catch(() => {
+          // Optimistic state remains; next load will reconcile with backend.
+        });
+    }
   };
 
   return (
@@ -246,10 +295,36 @@ function PackagesPanel() {
     { id: 'pro', name: 'Pro', monthlyFee: 499, discountPercent: 0, features: ['Team access', 'Custom gateway support', 'Higher sales volume'] },
   ]);
 
+  useEffect(() => {
+    if (!hasApiToken()) return;
+
+    fetchPackages()
+      .then((items) => {
+        if (items.length > 0) {
+          setPackages(items);
+        }
+      })
+      .catch(() => {
+        // Local package controls remain editable without backend access.
+      });
+  }, []);
+
   const updatePackage = (packageId: string, patch: Partial<SubscriptionPackage>) => {
     setPackages((current) =>
       current.map((item) => (item.id === packageId ? { ...item, ...patch } : item)),
     );
+  };
+
+  const persistPackage = (subscriptionPackage: SubscriptionPackage) => {
+    if (!hasApiToken()) return;
+
+    savePackage(subscriptionPackage)
+      .then((savedPackage) => {
+        setPackages((current) => current.map((item) => (item.id === subscriptionPackage.id ? savedPackage : item)));
+      })
+      .catch(() => {
+        // Keep editable state; backend validation can be surfaced in a later toast layer.
+      });
   };
 
   return (
@@ -305,6 +380,13 @@ function PackagesPanel() {
                 className="w-full rounded-2xl border border-outline-variant/20 bg-white px-4 py-3 text-sm outline-none focus:border-primary"
               />
             </label>
+            <button
+              type="button"
+              onClick={() => persistPackage(item)}
+              className="mt-4 rounded-full bg-primary px-4 py-2 text-sm text-on-primary transition-colors hover:bg-primary-dim"
+            >
+              Save Package
+            </button>
           </div>
         ))}
       </div>
@@ -356,10 +438,36 @@ function IntegrationsPanel() {
     },
   ]);
 
+  useEffect(() => {
+    if (!hasApiToken()) return;
+
+    fetchGateways()
+      .then((items) => {
+        if (items.length > 0) {
+          setGateways(items);
+        }
+      })
+      .catch(() => {
+        // Keep local gateway drafts visible without backend access.
+      });
+  }, []);
+
   const updateGateway = (gatewayId: string, patch: Partial<PlatformGatewayConfig>) => {
     setGateways((current) =>
       current.map((gateway) => (gateway.id === gatewayId ? { ...gateway, ...patch } : gateway)),
     );
+  };
+
+  const persistGateway = (gateway: PlatformGatewayConfig) => {
+    if (!hasApiToken()) return;
+
+    saveGateway(gateway)
+      .then((savedGateway) => {
+        setGateways((current) => current.map((item) => (item.id === gateway.id ? savedGateway : item)));
+      })
+      .catch(() => {
+        // Keep editable state; backend validation can be surfaced in a later toast layer.
+      });
   };
 
   return (
@@ -478,6 +586,13 @@ function IntegrationsPanel() {
                   }`}
                 >
                   {gateway.enabled ? 'Enabled' : 'Disabled'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => persistGateway(gateway)}
+                  className="rounded-full bg-primary px-4 py-2 text-sm text-on-primary transition-colors hover:bg-primary-dim"
+                >
+                  Save Gateway
                 </button>
               </div>
             </div>
