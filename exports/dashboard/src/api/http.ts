@@ -13,6 +13,13 @@ export interface LoginCredentials {
   password: string;
 }
 
+export interface TrialSignupPayload {
+  name: string;
+  email: string;
+  password: string;
+  storeName: string;
+}
+
 export interface ApiTenant {
   id: number;
   name?: string;
@@ -69,9 +76,30 @@ export interface ApiClientOptions {
   fetcher?: ApiFetch;
 }
 
+interface ApiBaseUrlContext {
+  env?: Record<string, string | boolean | undefined>;
+  location?: Pick<Location, 'hostname'>;
+}
+
+export function resolveApiBaseUrl(context: ApiBaseUrlContext = {}) {
+  const env = context.env;
+  const explicitBaseUrl = typeof env?.VITE_API_URL === 'string' ? env.VITE_API_URL : undefined;
+  if (explicitBaseUrl) {
+    return explicitBaseUrl.replace(/\/$/, '');
+  }
+
+  const isDev = env?.DEV === true || env?.DEV === 'true';
+  if (isDev) {
+    return 'http://127.0.0.1:8000/api';
+  }
+
+  return '/api';
+}
+
 function getDefaultBaseUrl() {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
-  return env?.VITE_API_URL?.replace(/\/$/, '') || '/api';
+  const location = typeof window === 'undefined' ? undefined : window.location;
+  return resolveApiBaseUrl({ env, location });
 }
 
 function getStorage(options: ApiClientOptions): ApiStorage | undefined {
@@ -136,6 +164,27 @@ export function createApiClient(options: ApiClientOptions = {}) {
         const result = await request<LoginResponse>('/auth/login', {
           method: 'POST',
           body: JSON.stringify(credentials),
+        });
+        storage?.setItem(API_STORAGE_KEYS.token, result.token);
+        storage?.setItem(API_STORAGE_KEYS.user, JSON.stringify(result.user));
+        storage?.setItem(API_STORAGE_KEYS.tenants, JSON.stringify(result.tenants));
+
+        const firstTenant = result.tenants[0];
+        if (firstTenant) {
+          storage?.setItem(API_STORAGE_KEYS.tenantId, String(firstTenant.id));
+        }
+
+        return result;
+      },
+      async startTrial(payload: TrialSignupPayload) {
+        const result = await request<LoginResponse>('/auth/trial', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: payload.name,
+            email: payload.email,
+            password: payload.password,
+            store_name: payload.storeName,
+          }),
         });
         storage?.setItem(API_STORAGE_KEYS.token, result.token);
         storage?.setItem(API_STORAGE_KEYS.user, JSON.stringify(result.user));

@@ -1296,3 +1296,44 @@ Date: April 21, 2026
   - optimized asset storage
   - provider delivery
   - persistent save and inventory logging
+
+## 2026-04-23 02:05:00 - Unified SEO Workspace + Crawl Infrastructure
+
+- Website Builder now has a dedicated `SEO` tab instead of hiding SEO inside `Pages`.
+- `SEO` tab now uses mode switching:
+  - `Pages`
+  - `Products`
+- `SEO > Products` was unified with the same storefront product state path used by the Products module.
+- Added a shared subscribed product store so both Products module and SEO workspace use the same state pattern and persistence flow.
+- Added a shared storefront pages store for Website Builder pages so page SEO and future Website Builder changes stay connected to one page record source.
+- Added sitemap generation:
+  - emits `/sitemap.xml`
+  - includes homepage, products, collections, and Website Builder pages
+  - tracks `lastmod`
+  - refresh snapshot path added for product/page updates
+- Added robots generation:
+  - emits `/robots.txt`
+  - allows public SEO-relevant routes
+  - disallows admin, cart, checkout, and internal system paths
+  - references sitemap URL
+- Important maintenance note:
+  - any future Website Builder page structure/content changes should be checked against:
+    - `SEO` tab page mode
+    - shared pages store
+    - sitemap generation
+    - robots allow/disallow assumptions
+
+## 2026-04-23 13:03:08 - Canonical URL Support
+
+- Added a shared canonical URL helper for storefront SEO paths.
+- Canonical URLs now normalize:
+  - query parameters
+  - hash fragments
+  - trailing slash noise
+- Public canonical routing now resolves from shared SEO data sources:
+  - product slug from storefront product store
+  - website page slug from storefront pages store
+  - collection slug from category data
+- `FrontendModule` now applies canonical tags using the shared resolver so product and collection previews point to clean public URLs.
+- Website Builder SEO head sync now uses the shared canonical helper instead of its own direct canonical tag write.
+- App-level fallback canonical handling now covers the rest of the admin shell without overriding Website Builder SEO or Frontstore preview canonical behavior.

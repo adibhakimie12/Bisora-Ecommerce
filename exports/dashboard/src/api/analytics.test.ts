@@ -23,6 +23,13 @@ function testMapsDashboardFromApi() {
       },
     ],
     activity: [{ id: '1', title: 'Order ORD-9021 received', time: '1 minute ago', href: '#/orders/ORD-9021' }],
+    onboarding: {
+      progress: { completed: 2, total: 4, percent: 50 },
+      items: [
+        { key: 'add_first_product', title: 'Add first product', description: 'Create one item.', href: '#/products/new', completed: true },
+        { key: 'connect_payment', title: 'Connect payment', description: 'Enable checkout.', href: '#/settings/payments', completed: true },
+      ],
+    },
   });
 
   assert.equal(dashboard.metrics[0].value, 'RM 450');
@@ -30,6 +37,8 @@ function testMapsDashboardFromApi() {
   assert.equal(dashboard.revenueTrend[0].revenue, 450);
   assert.equal(dashboard.recentTransactions[0].id, '#ORD-9021');
   assert.equal(dashboard.activity[0].title, 'Order ORD-9021 received');
+  assert.equal(dashboard.onboarding.progress.percent, 50);
+  assert.equal(dashboard.onboarding.items[0].completed, true);
 }
 
 function testMapsReportsOverviewFromApi() {

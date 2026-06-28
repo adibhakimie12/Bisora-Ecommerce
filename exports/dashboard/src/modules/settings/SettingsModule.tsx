@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { CheckCircle2, Download, Plus, Search, X } from 'lucide-react';
+import { ApiError, API_STORAGE_KEYS } from '../../api/http';
+import { fetchNotificationLogs, processNotificationQueue, queueTestNotification, retryNotificationLog, updateNotificationLogStatus, type NotificationLogRecord } from '../../api/notifications';
+import { fetchStoreSettings, publishStorefront, saveStoreSettings, unpublishStorefront, type StoreSettings, type StoreSettingsPatch } from '../../api/settings';
 import {
   apiKeysSeed,
   courierProvidersSeed,
@@ -16,6 +19,7 @@ import {
   teamMembersSeed,
   webhooksSeed,
 } from './data';
+import { resolveSeoSitemapUrl } from './seoIndexing';
 import type {
   ApiKeyItem,
   CourierProvider,
@@ -39,6 +43,85 @@ interface SettingsModuleProps {
 interface BannerState {
   title: string;
   description: string;
+}
+
+interface GeneralSettingsForm {
+  storeName: string;
+  tagline: string;
+  legalName: string;
+  supportName: string;
+  email: string;
+  phone: string;
+  supportHours: string;
+  address: string;
+  country: string;
+  currency: string;
+  language: string;
+  timezone: string;
+  sellerAlertEmail: string;
+  sellerAlertWhatsApp: string;
+  sellerOrderAlertEmailEnabled: boolean;
+  sellerOrderAlertWhatsAppEnabled: boolean;
+  sellerOrderAlertOnlyAfterPayment: boolean;
+  sellerAlertRoles: string[];
+  orderPrefix: string;
+  autoConfirm: boolean;
+  autoCancel: boolean;
+  autoCancelHours: string;
+  lowStockThreshold: string;
+  dateFormat: string;
+  timeFormat: string;
+  dataRefresh: string;
+  compactMode: boolean;
+  internalAlerts: boolean;
+}
+
+interface DomainBrandingForm {
+  domain: string;
+  subdomain: string;
+  connectionStatus: string;
+  brandName: string;
+  tagline: string;
+  logoLabel: string;
+  logoStyle: string;
+  primaryColor: string;
+  accentColor: string;
+  neutralColor: string;
+  buttonShape: string;
+  themePreset: string;
+  showAnnouncementBar: boolean;
+  showFloatingHelp: boolean;
+}
+
+interface CheckoutSettingsForm {
+  fields: {
+    phoneRequired: boolean;
+    companyField: boolean;
+    addressLine2: boolean;
+    marketingOptIn: boolean;
+  };
+  shippingMethods: {
+    standard: boolean;
+    express: boolean;
+    sameDay: boolean;
+  };
+  payments: {
+    card: boolean;
+    onlineBanking: boolean;
+    cod: boolean;
+  };
+  summary: {
+    showCouponField: boolean;
+    showDeliveryEstimate: boolean;
+    showTrustBadges: boolean;
+  };
+  protection: {
+    enabled: boolean;
+    title: string;
+    fee: string;
+  };
+  preferredShipping: string;
+  preferredPayment: string;
 }
 
 interface PaymentGatewaySavePayload {
@@ -111,6 +194,171 @@ interface NotificationEventTemplate {
     WhatsApp: NotificationChannelDraft;
   };
   variables: string[];
+}
+
+type NotificationProviderForm = Pick<
+  GeneralSettingsForm,
+  'sellerOrderAlertEmailEnabled' | 'sellerAlertEmail' | 'sellerOrderAlertWhatsAppEnabled' | 'sellerAlertWhatsApp'
+>;
+
+interface MessagingProviderDraft {
+  id: string;
+  name: string;
+  status?: string;
+  fields: Array<{ label: string; value: string }>;
+}
+
+export function buildNotificationProviderSettings(form: NotificationProviderForm) {
+  return {
+    email: {
+      enabled: form.sellerOrderAlertEmailEnabled,
+      connected: form.sellerOrderAlertEmailEnabled,
+      sender: form.sellerAlertEmail,
+    },
+    whatsapp: {
+      enabled: form.sellerOrderAlertWhatsAppEnabled,
+      connected: form.sellerOrderAlertWhatsAppEnabled,
+      sender: form.sellerAlertWhatsApp,
+    },
+    sms: {
+      enabled: false,
+      connected: false,
+    },
+  };
+}
+
+function normalizeCredentialKey(label: string) {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function resolveMessagingChannel(integrationId: string) {
+  if (integrationId === 'in-6') {
+    return 'whatsapp';
+  }
+
+  if (integrationId === 'in-7') {
+    return 'email';
+  }
+
+  if (integrationId === 'in-8') {
+    return 'sms';
+  }
+
+  return 'unknown';
+}
+
+export function buildMessagingProviderNotificationSettings(integrationId: string, provider: MessagingProviderDraft) {
+  const channel = resolveMessagingChannel(integrationId);
+  const credentials = provider.fields.reduce<Record<string, string>>((carry, field) => {
+    carry[normalizeCredentialKey(field.label)] = field.value;
+    return carry;
+  }, {});
+
+  return {
+    providers: {
+      [channel]: {
+        enabled: true,
+        connected: true,
+        provider_id: provider.id,
+        provider_name: provider.name,
+        credentials,
+      },
+    },
+  };
+}
+
+export function buildMessagingProviderDisconnectSettings(integrationId: string, provider: MessagingProviderDraft) {
+  const channel = resolveMessagingChannel(integrationId);
+
+  return {
+    providers: {
+      [channel]: {
+        enabled: false,
+        connected: false,
+        provider_id: provider.id,
+        provider_name: provider.name,
+      },
+    },
+  };
+}
+
+export function applyMessagingProviderConnectionStatus<T extends MessagingProviderDraft>(
+  integrationId: string,
+  providers: T[],
+  notificationSettings: Record<string, any> | undefined,
+) {
+  const channel = resolveMessagingChannel(integrationId);
+  const connectedProvider = notificationSettings?.providers?.[channel];
+
+  if (!connectedProvider?.connected) {
+    return providers;
+  }
+
+  return providers.map((provider) => {
+    const isConnectedProvider =
+      connectedProvider.provider_id === provider.id
+      || (!connectedProvider.provider_id && connectedProvider.provider_name === provider.name);
+
+    if (!isConnectedProvider) {
+      return provider;
+    }
+
+    return {
+      ...provider,
+      status: 'Connected',
+      fields: provider.fields.map((field) => {
+        const credentialValue = connectedProvider.credentials?.[normalizeCredentialKey(field.label)];
+
+        return {
+          ...field,
+          value: typeof credentialValue === 'string' ? credentialValue : field.value,
+        };
+      }),
+    };
+  });
+}
+
+export function buildNotificationChannelSettings(name: string, draft: NotificationChannelDraft) {
+  const channelKey = name.toLowerCase();
+
+  return {
+    channel_defaults: {
+      [channelKey]: {
+        sender_label: draft.senderLabel,
+        subject: draft.subject,
+        body: draft.body,
+        enabled: draft.enabled,
+        send_timing: draft.sendTiming,
+        trigger: draft.trigger,
+      },
+    },
+    providers: {
+      [channelKey]: {
+        enabled: draft.enabled,
+        connected: draft.enabled,
+        sender: draft.senderLabel,
+      },
+    },
+  };
+}
+
+export function mergeNotificationSettings(existing: Record<string, any> | undefined, patch: Record<string, any>) {
+  return {
+    ...(existing ?? {}),
+    ...patch,
+    providers: {
+      ...((existing?.providers as Record<string, any> | undefined) ?? {}),
+      ...((patch.providers as Record<string, any> | undefined) ?? {}),
+    },
+    channel_defaults: {
+      ...((existing?.channel_defaults as Record<string, any> | undefined) ?? {}),
+      ...((patch.channel_defaults as Record<string, any> | undefined) ?? {}),
+    },
+  };
 }
 
 const defaultShippingMethodNames = ['Standard Delivery', 'Express Delivery', 'Same-Day Delivery'];
@@ -224,6 +472,146 @@ const recommendedShippingRoutingTemplates: ShippingRoutingTemplateCard[] = [
     description: 'Keep East Malaysia routing inside carriers that match supported lane expectations.',
   },
 ];
+
+function hasApiSession() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return Boolean(window.localStorage.getItem(API_STORAGE_KEYS.token));
+}
+
+function mergePaymentGatewaysFromSettings(current: PaymentGateway[], settings: Record<string, any>): PaymentGateway[] {
+  const gateways = settings.payments?.gateways;
+  if (!Array.isArray(gateways)) {
+    return current;
+  }
+
+  return current.map((gateway) => {
+    const saved = gateways.find((item: { slug?: string }) => item.slug === gateway.slug);
+    if (!saved) {
+      return gateway;
+    }
+
+    return {
+      ...gateway,
+      checkoutLabel: typeof saved.checkout_label === 'string' ? saved.checkout_label : gateway.checkoutLabel,
+      enabledAtCheckout: typeof saved.enabled_at_checkout === 'boolean' ? saved.enabled_at_checkout : gateway.enabledAtCheckout,
+      mode: saved.mode === 'Live' || saved.mode === 'Test' ? saved.mode : gateway.mode,
+      setupStage: isPaymentSetupStage(saved.setup_stage) ? saved.setup_stage : gateway.setupStage,
+      status: saved.status === 'Connected' || saved.status === 'Disconnected' || saved.status === 'Pending' ? saved.status : gateway.status,
+    };
+  });
+}
+
+function mergeManualMethodsFromSettings(current: ManualMethod[], settings: Record<string, any>): ManualMethod[] {
+  const methods = settings.payments?.manual_methods;
+  if (!Array.isArray(methods)) {
+    return current;
+  }
+
+  return current.map((method) => {
+    const saved = methods.find((item: { slug?: string }) => item.slug === method.slug);
+    return saved && typeof saved.enabled === 'boolean' ? { ...method, enabled: saved.enabled } : method;
+  });
+}
+
+function mergePaymentRulesFromSettings(current: PaymentRule[], settings: Record<string, any>): PaymentRule[] {
+  const rules = settings.payments?.rules;
+  if (!Array.isArray(rules)) {
+    return current;
+  }
+
+  return rules
+    .filter((rule: Partial<PaymentRule>) => rule.id && rule.name && rule.condition && rule.action)
+    .map((rule: Partial<PaymentRule>): PaymentRule => ({
+      id: String(rule.id),
+      name: String(rule.name),
+      condition: String(rule.condition),
+      action: String(rule.action),
+      status: rule.status === 'Active' ? 'Active' : 'Draft',
+    }));
+}
+
+function mergeShippingProvidersFromSettings(current: ShippingProviderIntegration[], settings: Record<string, any>): ShippingProviderIntegration[] {
+  const providers = settings.shipping?.providers;
+  if (!Array.isArray(providers)) {
+    return current;
+  }
+
+  return current.map((provider) => {
+    const saved = providers.find((item: { slug?: string }) => item.slug === provider.slug);
+    if (!saved) {
+      return provider;
+    }
+
+    return {
+      ...provider,
+      autoTracking: typeof saved.auto_tracking === 'boolean' ? saved.auto_tracking : provider.autoTracking,
+      enabled: typeof saved.enabled === 'boolean' ? saved.enabled : provider.enabled,
+      mode: saved.mode === 'Live' || saved.mode === 'Test' ? saved.mode : provider.mode,
+      status: saved.status === 'Connected' || saved.status === 'Disabled' || saved.status === 'Sandbox' ? saved.status : provider.status,
+    };
+  });
+}
+
+function mergeShippingZonesFromSettings(current: ShippingZone[], settings: Record<string, any>): ShippingZone[] {
+  const zones = settings.shipping?.zones;
+  return Array.isArray(zones) && zones.length > 0 ? zones : current;
+}
+
+function mergeShippingRoutingRulesFromSettings(current: ShippingRoutingRule[], settings: Record<string, any>): ShippingRoutingRule[] {
+  const rules = settings.shipping?.routing_rules;
+  if (!Array.isArray(rules)) {
+    return current;
+  }
+
+  return rules
+    .filter((rule: Partial<ShippingRoutingRule>) => rule.id && rule.name && rule.condition && rule.action)
+    .map((rule: Partial<ShippingRoutingRule>): ShippingRoutingRule => ({
+      id: String(rule.id),
+      name: String(rule.name),
+      condition: String(rule.condition),
+      action: String(rule.action),
+      status: rule.status === 'Active' ? 'Active' : 'Draft',
+    }));
+}
+
+function isPaymentSetupStage(value: unknown): value is PaymentSetupStage {
+  return value === 'Not Started' || value === 'Applied' || value === 'Awaiting Approval' || value === 'Ready to Connect' || value === 'Live';
+}
+
+function buildPaymentsPayload(gateways: PaymentGateway[], manualMethods: ManualMethod[], rules: PaymentRule[]) {
+  return {
+    gateways: gateways.map((gateway) => ({
+      slug: gateway.slug,
+      status: gateway.status,
+      mode: gateway.mode,
+      setup_stage: gateway.setupStage,
+      enabled_at_checkout: gateway.enabledAtCheckout,
+      checkout_label: gateway.checkoutLabel,
+    })),
+    manual_methods: manualMethods.map((method) => ({
+      slug: method.slug,
+      enabled: method.enabled,
+    })),
+    rules,
+  };
+}
+
+function buildShippingPayload(providers: ShippingProviderIntegration[], zones: ShippingZone[], routingRules: ShippingRoutingRule[]) {
+  return {
+    providers: providers.map((provider) => ({
+      slug: provider.slug,
+      status: provider.status,
+      mode: provider.mode,
+      enabled: provider.enabled,
+      auto_tracking: provider.autoTracking,
+    })),
+    zones,
+    routing_rules: routingRules,
+  };
+}
 
 const shippingSimulationScenarios = [
   'Standard local order',
@@ -579,6 +967,7 @@ function getManualMethodToggleCopy(method: ManualMethod, enabled: boolean) {
 export function SettingsModule({ section, subSection }: SettingsModuleProps) {
   const activeSection = normalizeSection(section);
   const [banner, setBanner] = useState<BannerState | null>(null);
+  const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
 
   const [paymentGateways, setPaymentGateways] = useState(paymentGatewaysSeed);
   const [manualMethods, setManualMethods] = useState(manualMethodsSeed);
@@ -608,6 +997,79 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
 
   const notify = (title: string, description: string) => setBanner({ title, description });
 
+  useEffect(() => {
+    if (!hasApiSession()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchStoreSettings()
+      .then((settings) => {
+        if (cancelled) {
+          return;
+        }
+
+        setStoreSettings(settings);
+        setPaymentGateways((current) => mergePaymentGatewaysFromSettings(current, settings.settings));
+        setManualMethods((current) => mergeManualMethodsFromSettings(current, settings.settings));
+        setPaymentRules((current) => mergePaymentRulesFromSettings(current, settings.settings));
+        setShippingProviders((current) => mergeShippingProvidersFromSettings(current, settings.settings));
+        setShippingZones((current) => mergeShippingZonesFromSettings(current, settings.settings));
+        setShippingRoutingRules((current) => mergeShippingRoutingRulesFromSettings(current, settings.settings));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          notify('Settings API unavailable', 'Using local defaults until the backend session is ready.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistSettingsPatch = async (patch: StoreSettingsPatch, successTitle: string, successDescription: string) => {
+    if (!hasApiSession()) {
+      notify(successTitle, `${successDescription} Local preview only until login is active.`);
+      return;
+    }
+
+    try {
+      const saved = await saveStoreSettings(patch);
+      setStoreSettings(saved);
+      notify(successTitle, successDescription);
+    } catch {
+      notify('Settings save failed', 'Backend could not save this change. Please try again after checking the API session.');
+    }
+  };
+
+  const persistPayments = (
+    nextGateways = paymentGateways,
+    nextManualMethods = manualMethods,
+    nextRules = paymentRules,
+    successTitle = 'Payment settings saved',
+    successDescription = 'Payment configuration has been synced to the backend.',
+  ) =>
+    persistSettingsPatch(
+      { settings: { payments: buildPaymentsPayload(nextGateways, nextManualMethods, nextRules) } },
+      successTitle,
+      successDescription,
+    );
+
+  const persistShipping = (
+    nextProviders = shippingProviders,
+    nextZones = shippingZones,
+    nextRoutingRules = shippingRoutingRules,
+    successTitle = 'Shipping settings saved',
+    successDescription = 'Shipping configuration has been synced to the backend.',
+  ) =>
+    persistSettingsPatch(
+      { settings: { shipping: buildShippingPayload(nextProviders, nextZones, nextRoutingRules) } },
+      successTitle,
+      successDescription,
+    );
+
   return (
     <section className="space-y-6">
       <header className="space-y-2">
@@ -628,20 +1090,88 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
 
       {activeSection === 'general' ? (
         <GeneralSettingsPage
+          storeSettings={storeSettings}
           onNotify={notify}
-          onSave={() => notify('General settings saved', 'Store identity and default preferences updated.')}
+          onSave={(form) =>
+            persistSettingsPatch(
+              {
+                name: form.storeName,
+                currency: form.currency,
+                timezone: form.timezone,
+                settings: {
+                  general: form,
+                  contact_email: form.email,
+                  notifications: mergeNotificationSettings(storeSettings?.settings?.notifications, {
+                    seller_alert_email: form.sellerOrderAlertEmailEnabled ? form.sellerAlertEmail : null,
+                    seller_alert_whatsapp: form.sellerOrderAlertWhatsAppEnabled ? form.sellerAlertWhatsApp : null,
+                    seller_alert_only_after_payment: form.sellerOrderAlertOnlyAfterPayment,
+                    seller_alert_roles: form.sellerAlertRoles,
+                    providers: buildNotificationProviderSettings(form),
+                  }),
+                },
+              },
+              'General settings saved',
+              'Store identity and default preferences updated.',
+            )
+          }
         />
       ) : null}
 
       {activeSection === 'checkout' ? (
         <CheckoutSettingsPage
+          storeSettings={storeSettings}
           onNotify={notify}
-          onSave={() => notify('Checkout settings saved', 'Checkout form and method preferences updated.')}
+          onSave={(form) =>
+            persistSettingsPatch(
+              { settings: { checkout: form } },
+              'Checkout settings saved',
+              'Checkout form and method preferences updated.',
+            )
+          }
         />
       ) : null}
 
       {activeSection === 'domain-branding' ? (
-        <DomainBrandingPage onSave={() => notify('Domain & branding saved', 'Storefront branding configuration updated.')} />
+        <DomainBrandingPage
+          storeSettings={storeSettings}
+          onPublish={async () => {
+            if (!hasApiSession()) {
+              notify('Storefront publish needs login', 'Login first so Bisora can publish this storefront.');
+              return;
+            }
+            try {
+              const saved = await publishStorefront();
+              setStoreSettings(saved);
+              notify('Storefront published', 'Your storefront is live and the launch checklist has been updated.');
+            } catch {
+              notify('Publish failed', 'Backend could not publish the storefront. Please check the API session.');
+            }
+          }}
+          onSave={(form) =>
+            persistSettingsPatch(
+              {
+                managedDomain: form.subdomain,
+                customDomain: form.domain,
+                settings: { branding: form },
+              },
+              'Domain & branding saved',
+              'Storefront branding configuration updated.',
+            )
+          }
+          onUnpublish={async () => {
+            if (!hasApiSession()) {
+              notify('Storefront unpublish needs login', 'Login first so Bisora can update storefront status.');
+              return;
+            }
+            try {
+              const saved = await unpublishStorefront();
+              setStoreSettings(saved);
+              notify('Storefront moved to draft', 'The storefront is no longer marked as live.');
+            } catch {
+              notify('Unpublish failed', 'Backend could not update storefront status. Please check the API session.');
+            }
+          }}
+        />
       ) : null}
 
       {activeSection === 'payments' ? (
@@ -652,33 +1182,42 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
           subSection={subSection}
           onOpenGateway={(gatewaySlug) => (window.location.hash = `/settings/payments/${gatewaySlug}`)}
           onConnectGateway={(gatewayId) =>
-            setPaymentGateways((current) =>
-              current.map((gateway) =>
+            setPaymentGateways((current) => {
+              const next: PaymentGateway[] = current.map((gateway) =>
                 gateway.id === gatewayId
-                  ? { ...gateway, status: 'Pending', mode: 'Test', enabledAtCheckout: false, setupStage: 'Applied' }
+                  ? { ...gateway, status: 'Pending' as const, mode: 'Test' as const, enabledAtCheckout: false, setupStage: 'Applied' as const }
                   : gateway,
-              ),
-            )
+              );
+              void persistPayments(next, manualMethods, paymentRules, 'Gateway setup started', 'Gateway setup state has been synced.');
+              return next;
+            })
           }
           onToggleManual={(id) =>
             setManualMethods((current) => {
               const target = current.find((method) => method.id === id);
+              const next = current.map((method) => (method.id === id ? { ...method, enabled: !method.enabled } : method));
               if (target) {
                 const nextEnabled = !target.enabled;
                 const copy = getManualMethodToggleCopy(target, nextEnabled);
-                notify(copy.title, copy.description);
+                void persistPayments(paymentGateways, next, paymentRules, copy.title, copy.description);
               }
 
-              return current.map((method) => (method.id === id ? { ...method, enabled: !method.enabled } : method));
+              return next;
             })
           }
           onToggleRule={(id) =>
-            setPaymentRules((current) =>
-              current.map((rule) => (rule.id === id ? { ...rule, status: rule.status === 'Active' ? 'Draft' : 'Active' } : rule)),
-            )
+            setPaymentRules((current) => {
+              const next: PaymentRule[] = current.map((rule) => (rule.id === id ? { ...rule, status: rule.status === 'Active' ? 'Draft' : 'Active' } : rule));
+              void persistPayments(paymentGateways, manualMethods, next, 'Payment rule updated', 'Rule status has been synced to the backend.');
+              return next;
+            })
           }
           onDeleteRule={(id) =>
-            setPaymentRules((current) => current.filter((rule) => rule.id !== id))
+            setPaymentRules((current) => {
+              const next = current.filter((rule) => rule.id !== id);
+              void persistPayments(paymentGateways, manualMethods, next, 'Payment rule deleted', 'Rule stack has been synced to the backend.');
+              return next;
+            })
           }
           onDuplicateRule={(id) => {
             const target = paymentRules.find((rule) => rule.id === id);
@@ -693,19 +1232,25 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
               status: 'Draft',
             };
 
-            setPaymentRules((current) => [...current, duplicatedRule]);
-            notify('Payment rule duplicated', `${duplicatedRule.name} added as a draft copy.`);
+            setPaymentRules((current) => {
+              const next = [...current, duplicatedRule];
+              void persistPayments(paymentGateways, manualMethods, next, 'Payment rule duplicated', `${duplicatedRule.name} added as a draft copy.`);
+              return next;
+            });
             return duplicatedRule;
           }}
           onCreateRuleFromTemplate={(template) => {
             const createdRule = createPaymentRuleFromTemplate(template);
-            setPaymentRules((current) => [...current, createdRule]);
-            notify('Recommended rule added', `${createdRule.name} was added as a draft template.`);
+            setPaymentRules((current) => {
+              const next = [...current, createdRule];
+              void persistPayments(paymentGateways, manualMethods, next, 'Recommended rule added', `${createdRule.name} was added as a draft template.`);
+              return next;
+            });
             return createdRule;
           }}
           onUpdateRule={(id, payload) => {
-            setPaymentRules((current) =>
-              current.map((rule) =>
+            setPaymentRules((current) => {
+              const next = current.map((rule) =>
                 rule.id === id
                   ? {
                       ...rule,
@@ -714,14 +1259,15 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
                       action: payload.action,
                     }
                   : rule,
-              ),
-            );
-            notify('Payment rule updated', `${payload.name} has been saved.`);
+              );
+              void persistPayments(paymentGateways, manualMethods, next, 'Payment rule updated', `${payload.name} has been saved.`);
+              return next;
+            });
           }}
           onSaveGateway={(gatewaySlug, payload) => {
             const target = paymentGateways.find((gateway) => gateway.slug === gatewaySlug);
-            setPaymentGateways((current) =>
-              current.map((gateway) =>
+            setPaymentGateways((current) => {
+              const next: PaymentGateway[] = current.map((gateway) =>
                 gateway.slug === gatewaySlug
                   ? {
                       ...gateway,
@@ -735,19 +1281,26 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
                           : false,
                     }
                   : gateway,
-              ),
-            );
-            notify(
-              `${target?.name ?? 'Gateway'} updated`,
-              payload.setupStage === 'Live' || payload.setupStage === 'Ready to Connect'
-                ? `Environment saved and checkout availability ${payload.enabledAtCheckout ? 'enabled' : 'disabled'}.`
-                : 'Progress and environment saved. Enable at checkout will stay off until setup is ready.',
-            );
+              );
+              void persistPayments(
+                next,
+                manualMethods,
+                paymentRules,
+                `${target?.name ?? 'Gateway'} updated`,
+                payload.setupStage === 'Live' || payload.setupStage === 'Ready to Connect'
+                  ? `Environment saved and checkout availability ${payload.enabledAtCheckout ? 'enabled' : 'disabled'}.`
+                  : 'Progress and environment saved. Enable at checkout will stay off until setup is ready.',
+              );
+              return next;
+            });
           }}
           onCreateRule={(ruleName) => {
             const newRule = buildPaymentRuleTemplate(ruleName);
-            setPaymentRules((current) => [...current, newRule]);
-            notify('Payment rule created', `${ruleName} added to rule stack.`);
+            setPaymentRules((current) => {
+              const next = [...current, newRule];
+              void persistPayments(paymentGateways, manualMethods, next, 'Payment rule created', `${ruleName} added to rule stack.`);
+              return next;
+            });
             return newRule;
           }}
         />
@@ -769,8 +1322,11 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
               weightRates: [{ id: `wr-${Date.now()}`, name: 'Standard Delivery', range: '0.10kg - 1.00kg', rate: 'MYR5.00' }],
               priceRates: [{ id: `pr-${Date.now()}`, name: 'Standard Delivery', range: 'MYR0.00 - MYR99.00', rate: 'MYR5.00' }],
             };
-            setShippingZones((current) => [...current, newZone]);
-            notify('Zone created', 'New shipping zone was added.');
+            setShippingZones((current) => {
+              const next = [...current, newZone];
+              void persistShipping(shippingProviders, next, shippingRoutingRules, 'Zone created', 'New shipping zone was added.');
+              return next;
+            });
             return newZone;
           }}
           onConfigureCourier={(id) => {
@@ -790,28 +1346,27 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
               return;
             }
 
-            setShippingProviders((current) =>
-              current.map((provider) =>
+            setShippingProviders((current) => {
+              const next: ShippingProviderIntegration[] = current.map((provider) =>
                 provider.id === id
                   ? {
                       ...provider,
                       enabled: true,
-                      status: 'Sandbox',
-                      mode: 'Test',
+                      status: 'Sandbox' as const,
+                      mode: 'Test' as const,
                     }
                   : provider,
-              ),
-            );
-            notify(`${target.name} activated`, 'Provider moved into test setup so seller can continue configuration.');
+              );
+              void persistShipping(next, shippingZones, shippingRoutingRules, `${target.name} activated`, 'Provider moved into test setup so seller can continue configuration.');
+              return next;
+            });
           }}
           onSaveZone={(zoneId, payload) => {
             setShippingZones((current) => {
               const exists = current.some((zone) => zone.id === zoneId);
-              if (!exists) {
-                return [...current, payload];
-              }
-
-              return current.map((zone) =>
+              const next = !exists
+                ? [...current, payload]
+                : current.map((zone) =>
                 zone.id === zoneId
                   ? {
                       ...zone,
@@ -819,20 +1374,27 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
                     }
                   : zone,
               );
+              void persistShipping(shippingProviders, next, shippingRoutingRules, 'Shipping zone updated', `${payload.name} has been saved.`);
+              return next;
             });
-            notify('Shipping zone updated', `${payload.name} has been saved.`);
           }}
           onToggleRoutingRule={(id) =>
-            setShippingRoutingRules((current) =>
-              current.map((rule) => (rule.id === id ? { ...rule, status: rule.status === 'Active' ? 'Draft' : 'Active' } : rule)),
-            )
+            setShippingRoutingRules((current) => {
+              const next: ShippingRoutingRule[] = current.map((rule) => (rule.id === id ? { ...rule, status: rule.status === 'Active' ? 'Draft' : 'Active' } : rule));
+              void persistShipping(shippingProviders, shippingZones, next, 'Routing rule updated', 'Routing status has been synced to the backend.');
+              return next;
+            })
           }
           onDeleteRoutingRule={(id) =>
-            setShippingRoutingRules((current) => current.filter((rule) => rule.id !== id))
+            setShippingRoutingRules((current) => {
+              const next = current.filter((rule) => rule.id !== id);
+              void persistShipping(shippingProviders, shippingZones, next, 'Routing rule deleted', 'Routing stack has been synced to the backend.');
+              return next;
+            })
           }
           onUpdateRoutingRule={(id, payload) => {
-            setShippingRoutingRules((current) =>
-              current.map((rule) =>
+            setShippingRoutingRules((current) => {
+              const next = current.map((rule) =>
                 rule.id === id
                   ? {
                       ...rule,
@@ -841,14 +1403,18 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
                       action: payload.action,
                     }
                   : rule,
-              ),
-            );
-            notify('Routing rule updated', `${payload.name} has been saved.`);
+              );
+              void persistShipping(shippingProviders, shippingZones, next, 'Routing rule updated', `${payload.name} has been saved.`);
+              return next;
+            });
           }}
           onCreateRoutingRule={(ruleName) => {
             const newRule = buildShippingRoutingRuleTemplate(ruleName);
-            setShippingRoutingRules((current) => [...current, newRule]);
-            notify('Routing rule created', `${ruleName} added to routing stack.`);
+            setShippingRoutingRules((current) => {
+              const next = [...current, newRule];
+              void persistShipping(shippingProviders, shippingZones, next, 'Routing rule created', `${ruleName} added to routing stack.`);
+              return next;
+            });
             return newRule;
           }}
           onDuplicateRoutingRule={(id) => {
@@ -864,14 +1430,20 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
               status: 'Draft',
             };
 
-            setShippingRoutingRules((current) => [...current, duplicatedRule]);
-            notify('Routing rule duplicated', `${duplicatedRule.name} added as a draft copy.`);
+            setShippingRoutingRules((current) => {
+              const next = [...current, duplicatedRule];
+              void persistShipping(shippingProviders, shippingZones, next, 'Routing rule duplicated', `${duplicatedRule.name} added as a draft copy.`);
+              return next;
+            });
             return duplicatedRule;
           }}
           onCreateRoutingRuleFromTemplate={(template) => {
             const createdRule = createShippingRoutingRuleFromTemplate(template);
-            setShippingRoutingRules((current) => [...current, createdRule]);
-            notify('Recommended routing rule added', `${createdRule.name} was added as a draft template.`);
+            setShippingRoutingRules((current) => {
+              const next = [...current, createdRule];
+              void persistShipping(shippingProviders, shippingZones, next, 'Recommended routing rule added', `${createdRule.name} was added as a draft template.`);
+              return next;
+            });
             return createdRule;
           }}
         />
@@ -880,14 +1452,40 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
       {activeSection === 'notifications' ? (
         <NotificationsSettingsPage
           subSection={subSection}
-          onSave={(name) => notify(`${name} saved`, 'Notification configuration has been updated.')}
-          onSendTest={(channel) => notify('Test sent', `${channel} test notification sent successfully.`)}
+          notify={notify}
+          onSave={(name, patch) => {
+            if (patch) {
+              void persistSettingsPatch(
+                { settings: { notifications: mergeNotificationSettings(storeSettings?.settings?.notifications, patch) } },
+                `${name} saved`,
+                'Notification configuration has been synced to the backend.',
+              );
+              return;
+            }
+
+            notify(`${name} saved`, 'Notification configuration has been updated.');
+          }}
+          onSendTest={async (channel) => {
+            if (!hasApiSession()) {
+              notify('Test queued locally', `${channel} test notification will sync after login is active.`);
+              return;
+            }
+
+            try {
+              await queueTestNotification(channel);
+              notify('Test queued', `${channel} test notification was added to the automation queue.`);
+            } catch (error) {
+              const message = error instanceof ApiError ? error.message : 'Backend could not queue the test notification. Check provider settings and API session.';
+              notify('Test send failed', message);
+            }
+          }}
         />
       ) : null}
 
       {activeSection === 'integrations' ? (
         <IntegrationsSettingsPage
           items={integrations}
+          storeSettings={storeSettings}
           subSection={subSection}
           onOpenIntegration={(id) => (window.location.hash = `/settings/integrations/${id}`)}
           onToggleConnection={(id) =>
@@ -902,7 +1500,18 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
               ),
             )
           }
-          onSave={(name) => notify(`${name} saved`, 'Integration settings have been updated.')}
+          onSave={(name, patch) => {
+            if (patch) {
+              void persistSettingsPatch(
+                { settings: { notifications: mergeNotificationSettings(storeSettings?.settings?.notifications, patch) } },
+                `${name} saved`,
+                'Messaging provider setup has been synced to the backend.',
+              );
+              return;
+            }
+
+            notify(`${name} saved`, 'Integration settings have been updated.');
+          }}
         />
       ) : null}
 
@@ -974,8 +1583,8 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
             setShowCourierModal(false);
           }}
           onSave={(payload) => {
-            setCouriers((current) =>
-              current.map((courier) =>
+            setCouriers((current) => {
+              const next = current.map((courier) =>
                 courier.id === selectedCourier.id
                   ? {
                       ...courier,
@@ -988,15 +1597,17 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
                           : false,
                     }
                   : courier,
-              ),
-            );
+              );
+              void persistSettingsPatch(
+                { settings: { couriers: next } },
+                `${selectedCourier.name} updated`,
+                payload.setupStage === 'Ready to Connect' || payload.setupStage === 'Live'
+                  ? `Courier environment saved and routing availability ${payload.enabledForRouting ? 'enabled' : 'kept off'}.`
+                  : 'Courier progress saved. Routing stays off until setup is ready.',
+              );
+              return next;
+            });
             setShowCourierModal(false);
-            notify(
-              `${selectedCourier.name} updated`,
-              payload.setupStage === 'Ready to Connect' || payload.setupStage === 'Live'
-                ? `Courier environment saved and routing availability ${payload.enabledForRouting ? 'enabled' : 'kept off'}.`
-                : 'Courier progress saved. Routing stays off until setup is ready.',
-            );
           }}
         />
       ) : null}
@@ -1009,8 +1620,8 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
             setShowShippingProviderModal(false);
           }}
           onSave={(payload) => {
-            setShippingProviders((current) =>
-              current.map((provider) =>
+            setShippingProviders((current) => {
+              const next: ShippingProviderIntegration[] = current.map((provider) =>
                 provider.id === selectedShippingProvider.id
                   ? {
                       ...provider,
@@ -1020,15 +1631,19 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
                       status: payload.enabled ? (payload.environment === 'Live' ? 'Connected' : 'Sandbox') : 'Disabled',
                     }
                   : provider,
-              ),
-            );
+              );
+              void persistShipping(
+                next,
+                shippingZones,
+                shippingRoutingRules,
+                `${selectedShippingProvider.name} updated`,
+                payload.enabled
+                  ? `${selectedShippingProvider.name} is saved in ${payload.environment} mode with provider sync enabled.`
+                  : `${selectedShippingProvider.name} settings saved but provider remains disabled.`,
+              );
+              return next;
+            });
             setShowShippingProviderModal(false);
-            notify(
-              `${selectedShippingProvider.name} updated`,
-              payload.enabled
-                ? `${selectedShippingProvider.name} is saved in ${payload.environment} mode with provider sync enabled.`
-                : `${selectedShippingProvider.name} settings saved but provider remains disabled.`,
-            );
           }}
         />
       ) : null}
@@ -1372,25 +1987,30 @@ function SettingsAssistantModal({ onClose }: { onClose: () => void }) {
 }
 
 function GeneralSettingsPage({
+  storeSettings,
   onSave,
   onNotify,
 }: {
-  onSave: () => void;
+  storeSettings: StoreSettings | null;
+  onSave: (form: GeneralSettingsForm) => void;
   onNotify: (title: string, description: string) => void;
 }) {
-  const initialState = {
-    storeName: 'Atelier Admin',
-    tagline: 'Luxury Muslimah Fashion',
+  const initialState = useMemo<GeneralSettingsForm>(() => {
+    const savedGeneral = (storeSettings?.settings.general ?? {}) as Partial<GeneralSettingsForm>;
+
+    return {
+    storeName: savedGeneral.storeName ?? storeSettings?.name ?? 'Atelier Admin',
+    tagline: savedGeneral.tagline ?? 'Luxury Muslimah Fashion',
     legalName: 'Atelier Commerce Sdn. Bhd.',
     supportName: 'Sarah Admin',
-    email: 'concierge@lumiere.noor',
+    email: savedGeneral.email ?? (storeSettings?.settings.contact_email as string | undefined) ?? 'concierge@lumiere.noor',
     phone: '+60 12 345 6789',
     supportHours: 'Mon-Sat, 9:00 AM - 7:00 PM',
     address: 'Bukit Tinggi, Kuala Lumpur',
     country: 'Malaysia',
-    currency: 'MYR',
+    currency: storeSettings?.currency ?? 'MYR',
     language: 'English',
-    timezone: 'Asia/Kuala_Lumpur',
+    timezone: storeSettings?.timezone ?? 'Asia/Kuala_Lumpur',
     sellerAlertEmail: 'ops@atelier.noor',
     sellerAlertWhatsApp: '+60 12 345 6789',
     sellerOrderAlertEmailEnabled: true,
@@ -1407,11 +2027,18 @@ function GeneralSettingsPage({
     dataRefresh: 'Every 5 mins',
     compactMode: false,
     internalAlerts: true,
-  };
+    ...savedGeneral,
+    };
+  }, [storeSettings]);
 
   const [form, setForm] = useState(initialState);
   const [savedState, setSavedState] = useState(initialState);
   const isDirty = JSON.stringify(form) !== JSON.stringify(savedState);
+
+  useEffect(() => {
+    setForm(initialState);
+    setSavedState(initialState);
+  }, [initialState]);
 
   const updateField = <K extends keyof typeof initialState>(key: K, value: (typeof initialState)[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -1437,7 +2064,7 @@ function GeneralSettingsPage({
 
   const handleSave = () => {
     setSavedState(form);
-    onSave();
+    onSave(form);
   };
 
   return (
@@ -1882,46 +2509,62 @@ function GeneralSettingsPage({
 }
 
 function CheckoutSettingsPage({
+  storeSettings,
   onSave,
   onNotify,
 }: {
-  onSave: () => void;
+  storeSettings: StoreSettings | null;
+  onSave: (form: CheckoutSettingsForm) => void;
   onNotify: (title: string, description: string) => void;
 }) {
-  const initialState = {
+  const initialState = useMemo<CheckoutSettingsForm>(() => {
+    const savedCheckout = (storeSettings?.settings.checkout ?? {}) as Partial<CheckoutSettingsForm>;
+
+    return {
     fields: {
       phoneRequired: true,
       companyField: false,
       addressLine2: true,
       marketingOptIn: false,
+      ...savedCheckout.fields,
     },
     shippingMethods: {
       standard: true,
       express: true,
       sameDay: false,
+      ...savedCheckout.shippingMethods,
     },
     payments: {
       card: true,
       onlineBanking: true,
       cod: true,
+      ...savedCheckout.payments,
     },
     summary: {
       showCouponField: true,
       showDeliveryEstimate: true,
       showTrustBadges: true,
+      ...savedCheckout.summary,
     },
     protection: {
       enabled: true,
       title: 'Premium parcel protection',
       fee: '15.00',
+      ...savedCheckout.protection,
     },
-    preferredShipping: 'standard',
-    preferredPayment: 'card',
-  };
+    preferredShipping: savedCheckout.preferredShipping ?? 'standard',
+    preferredPayment: savedCheckout.preferredPayment ?? 'card',
+    };
+  }, [storeSettings]);
 
   const [form, setForm] = useState(initialState);
   const [savedState, setSavedState] = useState(initialState);
   const isDirty = JSON.stringify(form) !== JSON.stringify(savedState);
+
+  useEffect(() => {
+    setForm(initialState);
+    setSavedState(initialState);
+  }, [initialState]);
 
   const updateNested = <T extends keyof typeof initialState, K extends keyof (typeof initialState)[T]>(
     section: T,
@@ -1985,7 +2628,7 @@ function CheckoutSettingsPage({
 
   const handleSave = () => {
     setSavedState(form);
-    onSave();
+    onSave(form);
   };
 
   const fields = form.fields;
@@ -2293,16 +2936,25 @@ function CheckoutSettingsPage({
 }
 
 function DomainBrandingPage({
+  storeSettings,
+  onPublish,
   onSave,
+  onUnpublish,
 }: {
-  onSave: () => void;
+  storeSettings: StoreSettings | null;
+  onPublish: () => void;
+  onSave: (form: DomainBrandingForm) => void;
+  onUnpublish: () => void;
 }) {
-  const initialState = {
-    domain: 'store.lumiere-noor.com',
-    subdomain: 'lumiere-noor.shop',
+  const initialState = useMemo<DomainBrandingForm>(() => {
+    const savedBranding = (storeSettings?.settings.branding ?? {}) as Partial<DomainBrandingForm>;
+
+    return {
+    domain: storeSettings?.customDomain || savedBranding.domain || 'store.lumiere-noor.com',
+    subdomain: storeSettings?.managedDomain || savedBranding.subdomain || 'lumiere-noor.shop',
     connectionStatus: 'Connected',
-    brandName: 'Lumiere Noor',
-    tagline: 'Modern modestwear for refined wardrobes.',
+    brandName: storeSettings?.name || savedBranding.brandName || 'Lumiere Noor',
+    tagline: savedBranding.tagline || 'Modern modestwear for refined wardrobes.',
     logoLabel: 'Primary Wordmark',
     logoStyle: 'Editorial Serif',
     primaryColor: '#6b5b4d',
@@ -2312,14 +2964,38 @@ function DomainBrandingPage({
     themePreset: 'Warm Editorial',
     showAnnouncementBar: true,
     showFloatingHelp: false,
-  };
+    ...savedBranding,
+    };
+  }, [storeSettings]);
 
   const [form, setForm] = useState(initialState);
   const [savedState, setSavedState] = useState(initialState);
   const [showDomainModal, setShowDomainModal] = useState(false);
   const [domainModalMode, setDomainModalMode] = useState<'add' | 'edit'>('edit');
   const [dnsLastChecked, setDnsLastChecked] = useState('2 mins ago');
+  const [sitemapCopied, setSitemapCopied] = useState(false);
   const isDirty = JSON.stringify(form) !== JSON.stringify(savedState);
+  const storefront = (storeSettings?.settings.storefront ?? {}) as { status?: string; published_url?: string; published_at?: string };
+  const isLive = storefront.status === 'live';
+  const sitemapUrl = resolveSeoSitemapUrl({
+    domain: form.domain,
+    subdomain: form.subdomain,
+    connectionStatus: form.connectionStatus,
+  });
+
+  useEffect(() => {
+    setForm(initialState);
+    setSavedState(initialState);
+  }, [initialState]);
+
+  useEffect(() => {
+    if (!sitemapCopied) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => setSitemapCopied(false), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [sitemapCopied]);
 
   const updateField = <K extends keyof typeof initialState>(key: K, value: (typeof initialState)[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -2346,7 +3022,16 @@ function DomainBrandingPage({
 
   const handleSave = () => {
     setSavedState(form);
-    onSave();
+    onSave(form);
+  };
+
+  const handleCopySitemap = async () => {
+    try {
+      await navigator.clipboard?.writeText(sitemapUrl);
+      setSitemapCopied(true);
+    } catch {
+      setSitemapCopied(false);
+    }
   };
 
   return (
@@ -2581,6 +3266,29 @@ function DomainBrandingPage({
           </div>
         </Panel>
 
+        <Panel title="Get Your Site Indexed">
+          <div className="space-y-4 text-sm text-on-surface-variant">
+            <div className="rounded-2xl border border-outline-variant/20 bg-surface-low p-4">
+              <p className="font-medium text-on-surface">Step 1: Connect domain</p>
+              <p className="mt-1">Use your main store domain first so Google sees the final version of your website.</p>
+            </div>
+            <div className="rounded-2xl border border-outline-variant/20 bg-surface-low p-4">
+              <p className="font-medium text-on-surface">Step 2: Submit sitemap to Google Search Console</p>
+              <p className="mt-1">Copy this sitemap URL and submit it in Google Search Console so Google can discover your pages faster.</p>
+              <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                <code className="min-w-0 break-all text-xs text-on-surface">{sitemapUrl}</code>
+                <button className="rounded border border-outline-variant/30 px-3 py-2 text-sm hover:bg-surface-low" onClick={handleCopySitemap} type="button">
+                  {sitemapCopied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-outline-variant/20 bg-surface-low p-4">
+              <p className="font-medium text-on-surface">Step 3: Wait for indexing</p>
+              <p className="mt-1">Google usually needs some time to crawl and index new or updated pages, so a short wait is normal.</p>
+            </div>
+          </div>
+        </Panel>
+
         <div className="flex flex-wrap gap-2">
           <button className="rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low" onClick={applyRecommended} type="button">
             Apply Recommended
@@ -2595,6 +3303,44 @@ function DomainBrandingPage({
       </div>
 
       <aside className="space-y-4">
+        <Panel title="Storefront Publish">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-outline-variant/20 bg-surface-low p-3">
+              <div>
+                <p className="text-sm font-medium text-on-surface">Live status</p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  {isLive ? storefront.published_url ?? `https://${form.subdomain}` : 'Draft until you publish'}
+                </p>
+              </div>
+              <StatusBadge tone={isLive ? 'success' : 'neutral'}>{isLive ? 'Live' : 'Draft'}</StatusBadge>
+            </div>
+            {isLive ? (
+              <div className="space-y-2">
+                <a
+                  className="block w-full rounded bg-primary px-4 py-2 text-center text-sm font-medium text-on-primary hover:bg-primary-dim"
+                  href={`#/store/${storeSettings?.slug ?? form.subdomain}`}
+                >
+                  Open Live Storefront
+                </a>
+                <button
+                  className="w-full rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low"
+                  onClick={onUnpublish}
+                  type="button"
+                >
+                  Move to Draft
+                </button>
+              </div>
+            ) : (
+              <button
+                className="w-full rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim"
+                onClick={onPublish}
+                type="button"
+              >
+                Publish Storefront
+              </button>
+            )}
+          </div>
+        </Panel>
         <Panel title="Readiness Score">
           <p className="text-3xl font-semibold text-primary">{isDirty ? '82%' : '91%'}</p>
           <p className="text-sm text-on-surface-variant">Domain and branding quality score</p>
@@ -4636,12 +5382,14 @@ function ShippingMethodEditorModal({
 
 function NotificationsSettingsPage({
   subSection,
+  notify,
   onSave,
   onSendTest,
 }: {
   subSection?: string;
-  onSave: (name: string) => void;
-  onSendTest: (channel: string) => void;
+  notify: (title: string, description: string) => void;
+  onSave: (name: string, patch?: Record<string, any>) => void;
+  onSendTest: (channel: string) => void | Promise<void>;
 }) {
   const tab = normalizeNotificationsTab(subSection);
   const [enabled, setEnabled] = useState(true);
@@ -4659,6 +5407,65 @@ function NotificationsSettingsPage({
   const [aiTimingEnabled, setAiTimingEnabled] = useState(true);
   const [smartChannelEnabled, setSmartChannelEnabled] = useState(true);
   const [frequencyControlEnabled, setFrequencyControlEnabled] = useState(true);
+  const [notificationLogs, setNotificationLogs] = useState<NotificationLogRecord[]>([]);
+  const [notificationSummary, setNotificationSummary] = useState({ queued: 0, sent: 0, failed: 0 });
+  const [processingQueue, setProcessingQueue] = useState(false);
+
+  const refreshNotificationLogs = () => {
+    if (!hasApiSession()) {
+      return;
+    }
+
+    fetchNotificationLogs()
+      .then((result) => {
+        setNotificationLogs(result.logs);
+        setNotificationSummary(result.summary);
+      })
+      .catch(() => {
+        setNotificationLogs([]);
+        setNotificationSummary({ queued: 0, sent: 0, failed: 0 });
+      });
+  };
+
+  useEffect(() => {
+    refreshNotificationLogs();
+  }, []);
+
+  const updateLogStatus = async (id: string, status: 'queued' | 'sent' | 'failed') => {
+    const updated = await updateNotificationLogStatus(id, status);
+    setNotificationLogs((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    refreshNotificationLogs();
+  };
+
+  const retryLog = async (id: string) => {
+    const updated = await retryNotificationLog(id);
+    setNotificationLogs((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    refreshNotificationLogs();
+  };
+
+  const sendTestNotification = async (channel: string) => {
+    await onSendTest(channel);
+    refreshNotificationLogs();
+  };
+
+  const processQueueNow = async () => {
+    if (processingQueue) {
+      return;
+    }
+
+    setProcessingQueue(true);
+
+    try {
+      const summary = await processNotificationQueue(25);
+      notify('Queue processed', `${summary.sent} sent, ${summary.failed} failed, ${summary.processed} checked.`);
+      refreshNotificationLogs();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Backend could not process the notification queue.';
+      notify('Queue process failed', message);
+    } finally {
+      setProcessingQueue(false);
+    }
+  };
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -4675,6 +5482,76 @@ function NotificationsSettingsPage({
             </button>
           </div>
         </div>
+
+        <Panel title="Automation Queue">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-on-surface-variant">Process queued notifications immediately for this tenant.</p>
+              <button className="rounded-xl bg-primary px-3 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60" disabled={processingQueue} onClick={() => void processQueueNow()} type="button">
+                {processingQueue ? 'Processing...' : 'Process Queue'}
+              </button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <StatRow label="Queued" value={String(notificationSummary.queued)} />
+              <StatRow label="Sent" value={String(notificationSummary.sent)} />
+              <StatRow label="Failed" value={String(notificationSummary.failed)} />
+            </div>
+            <div className="overflow-x-auto rounded-2xl border border-outline-variant/20">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead className="bg-surface-low text-xs uppercase tracking-wide text-on-surface-variant">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Event</th>
+                    <th className="px-4 py-3 text-left">Order</th>
+                    <th className="px-4 py-3 text-left">Channel</th>
+                    <th className="px-4 py-3 text-left">Recipient</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/20">
+                  {notificationLogs.slice(0, 8).map((log) => (
+                    <tr key={log.id}>
+                      <td className="px-4 py-3">
+                        <p className="font-medium">{log.event.replace(/_/g, ' ')}</p>
+                        <p className="text-xs text-on-surface-variant">{log.subject || log.message}</p>
+                      </td>
+                      <td className="px-4 py-3">{log.orderNumber || 'System'}</td>
+                      <td className="px-4 py-3">{log.channel}</td>
+                      <td className="px-4 py-3">{log.recipient}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge tone={log.status === 'sent' ? 'success' : log.status === 'failed' ? 'warning' : 'neutral'}>
+                          {log.status}
+                        </StatusBadge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          {log.status === 'failed' ? (
+                            <button className="rounded border border-outline-variant/30 px-3 py-1.5 text-xs hover:bg-surface-low" onClick={() => void retryLog(log.id)} type="button">
+                              Retry
+                            </button>
+                          ) : null}
+                          <button className="rounded border border-outline-variant/30 px-3 py-1.5 text-xs hover:bg-surface-low" onClick={() => void updateLogStatus(log.id, 'sent')} type="button">
+                            Mark Sent
+                          </button>
+                          <button className="rounded border border-outline-variant/30 px-3 py-1.5 text-xs hover:bg-surface-low" onClick={() => void updateLogStatus(log.id, 'failed')} type="button">
+                            Failed
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {notificationLogs.length === 0 ? (
+                    <tr>
+                      <td className="px-4 py-8 text-center text-on-surface-variant" colSpan={6}>
+                        Notification queue is empty for this tenant.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </Panel>
 
         <LocalTabs
           tabs={[
@@ -4725,7 +5602,7 @@ function NotificationsSettingsPage({
                 </p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   {['Email', 'SMS', 'WhatsApp'].map((channel) => (
-                    <button className="rounded border border-outline-variant/30 px-3 py-2 text-sm hover:bg-surface-low" key={channel} onClick={() => onSendTest(channel)} type="button">
+                    <button className="rounded border border-outline-variant/30 px-3 py-2 text-sm hover:bg-surface-low" key={channel} onClick={() => void sendTestNotification(channel)} type="button">
                       Test {channel}
                     </button>
                   ))}
@@ -4804,9 +5681,9 @@ function NotificationsSettingsPage({
                 </p>
               </div>
               <div className="grid gap-4 xl:grid-cols-3">
-                <NotificationChannelPanel name="Email" onSave={onSave} onSendTest={onSendTest} />
-                <NotificationChannelPanel name="SMS" onSave={onSave} onSendTest={onSendTest} />
-                <NotificationChannelPanel name="WhatsApp" onSave={onSave} onSendTest={onSendTest} />
+                <NotificationChannelPanel name="Email" onSave={onSave} onSendTest={sendTestNotification} />
+                <NotificationChannelPanel name="SMS" onSave={onSave} onSendTest={sendTestNotification} />
+                <NotificationChannelPanel name="WhatsApp" onSave={onSave} onSendTest={sendTestNotification} />
               </div>
             </div>
           </Panel>
@@ -4872,8 +5749,8 @@ function NotificationChannelPanel({
   onSendTest,
 }: {
   name: string;
-  onSave: (name: string) => void;
-  onSendTest: (channel: string) => void;
+  onSave: (name: string, patch?: Record<string, any>) => void;
+  onSendTest: (channel: string) => void | Promise<void>;
 }) {
   const defaults = notificationChannelDefaults[name] ?? notificationChannelDefaults.Email;
   const [draft, setDraft] = useState<NotificationChannelDraft>(defaults);
@@ -4931,10 +5808,10 @@ function NotificationChannelPanel({
           </div>
         </div>
         <div className="flex gap-2">
-          <button className="rounded border border-outline-variant/30 px-3 py-2 text-sm hover:bg-surface-low" onClick={() => onSendTest(name)} type="button">
+          <button className="rounded border border-outline-variant/30 px-3 py-2 text-sm hover:bg-surface-low" onClick={() => void onSendTest(name)} type="button">
             Send Test
           </button>
-          <button className="rounded bg-primary px-3 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim" onClick={() => onSave(name)} type="button">
+          <button className="rounded bg-primary px-3 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim" onClick={() => onSave(name, buildNotificationChannelSettings(name, draft))} type="button">
             Save Default
           </button>
         </div>
@@ -5224,16 +6101,18 @@ function NotificationTemplateEditorModal({
 
 function IntegrationsSettingsPage({
   items,
+  storeSettings,
   subSection,
   onToggleConnection,
   onOpenIntegration,
   onSave,
 }: {
   items: IntegrationItem[];
+  storeSettings: StoreSettings | null;
   subSection?: string;
   onToggleConnection: (id: string) => void;
   onOpenIntegration: (id: string) => void;
-  onSave: (name: string) => void;
+  onSave: (name: string, patch?: Record<string, any>) => void;
 }) {
   const tab = normalizeIntegrationsTab(subSection);
   const [showGuide, setShowGuide] = useState(false);
@@ -5304,8 +6183,9 @@ function IntegrationsSettingsPage({
       <IntegrationDetailPage
         item={selectedIntegration}
         meta={integrationMeta[selectedIntegration.id]}
+        notificationSettings={storeSettings?.settings?.notifications}
         onBack={() => (window.location.hash = '/settings/integrations')}
-        onSave={() => onSave(selectedIntegration.name)}
+        onSave={(patch) => onSave(selectedIntegration.name, patch)}
       />
     );
   }
@@ -5438,13 +6318,15 @@ function IntegrationsSettingsPage({
 function IntegrationDetailPage({
   item,
   meta,
+  notificationSettings,
   onBack,
   onSave,
 }: {
   item: IntegrationItem;
   meta?: { sellerFit: string; setupHint: string; primaryUse: string };
+  notificationSettings?: Record<string, any>;
   onBack: () => void;
-  onSave: () => void;
+  onSave: (patch?: Record<string, any>) => void;
 }) {
   const isTrackingTool = item.category === 'Tracking & Analytics';
   const isMessagingHub = item.category === 'Messaging';
@@ -5588,11 +6470,13 @@ function IntegrationDetailPage({
         return [];
     }
   })();
+  const visibleMessagingProviders = applyMessagingProviderConnectionStatus(item.id, messagingProviders, notificationSettings);
   const [activeProviderId, setActiveProviderId] = useState(messagingProviders[0]?.id ?? '');
+  const connectedProviderId = visibleMessagingProviders.find((provider) => provider.status === 'Connected')?.id ?? '';
 
   useEffect(() => {
-    setActiveProviderId(messagingProviders[0]?.id ?? '');
-  }, [item.id]);
+    setActiveProviderId(connectedProviderId || visibleMessagingProviders[0]?.id || '');
+  }, [connectedProviderId, item.id]);
 
   const trackingConfig = (() => {
     switch (item.id) {
@@ -5680,9 +6564,35 @@ function IntegrationDetailPage({
         return null;
     }
   })();
-  const activeProvider = messagingProviders.find((provider) => provider.id === activeProviderId) ?? messagingProviders[0];
-  const recommendedProvider = messagingProviders.find((provider) => provider.status === 'Recommended') ?? messagingProviders[0];
-  const alternativeProviders = messagingProviders.filter((provider) => provider.id !== recommendedProvider?.id);
+  const activeProvider = visibleMessagingProviders.find((provider) => provider.id === activeProviderId) ?? visibleMessagingProviders[0];
+  const [providerFieldValues, setProviderFieldValues] = useState<Record<string, string>>({});
+  const recommendedProvider = visibleMessagingProviders.find((provider) => provider.status === 'Recommended') ?? visibleMessagingProviders[0];
+  const alternativeProviders = visibleMessagingProviders.filter((provider) => provider.id !== recommendedProvider?.id);
+
+  useEffect(() => {
+    if (!activeProvider) {
+      setProviderFieldValues({});
+      return;
+    }
+
+    setProviderFieldValues(
+      activeProvider.fields.reduce<Record<string, string>>((carry, field) => {
+        carry[field.label] = field.value;
+        return carry;
+      }, {}),
+    );
+  }, [activeProviderId, item.id]);
+
+  const activeProviderDraft = activeProvider
+    ? {
+        id: activeProvider.id,
+        name: activeProvider.name,
+        fields: activeProvider.fields.map((field) => ({
+          ...field,
+          value: providerFieldValues[field.label] ?? field.value,
+        })),
+      }
+    : null;
   const googleSetupGuide = (() => {
     switch (item.id) {
       case 'in-4':
@@ -5876,7 +6786,13 @@ function IntegrationDetailPage({
                           <Field key={field.label} label={field.label}>
                             <input
                               className="w-full rounded border border-outline-variant/30 bg-surface-lowest px-3 py-2 text-sm"
-                              defaultValue={field.value}
+                              onChange={(event) =>
+                                setProviderFieldValues((current) => ({
+                                  ...current,
+                                  [field.label]: event.target.value,
+                                }))
+                              }
+                              value={providerFieldValues[field.label] ?? field.value}
                             />
                           </Field>
                         ))}
@@ -5889,13 +6805,28 @@ function IntegrationDetailPage({
                               : 'This provider usually means live sending costs or provider billing will apply once seller starts using it.'}
                           </p>
                         </div>
-                        <button
-                          className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim"
-                          onClick={onSave}
-                          type="button"
-                        >
-                          Save Provider Setup
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim"
+                            onClick={() => {
+                              if (activeProviderDraft) {
+                                onSave(buildMessagingProviderNotificationSettings(item.id, activeProviderDraft));
+                              }
+                            }}
+                            type="button"
+                          >
+                            Save Provider Setup
+                          </button>
+                          {activeProvider.status === 'Connected' && activeProviderDraft ? (
+                            <button
+                              className="rounded border border-outline-variant/30 px-4 py-2 text-sm text-on-surface-variant hover:bg-surface-low"
+                              onClick={() => onSave(buildMessagingProviderDisconnectSettings(item.id, activeProviderDraft))}
+                              type="button"
+                            >
+                              Disconnect Provider
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   ) : null}
@@ -5912,7 +6843,7 @@ function IntegrationDetailPage({
                 <Field label="Webhook Endpoint">
                   <input className="w-full rounded border border-outline-variant/30 bg-surface px-3 py-2 text-sm" defaultValue={`https://api.atelier.com/hooks/${item.id}`} />
                 </Field>
-                <button className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim" onClick={onSave} type="button">
+                <button className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim" onClick={() => onSave()} type="button">
                   Save Configuration
                 </button>
               </>
@@ -5926,7 +6857,7 @@ function IntegrationDetailPage({
             <p>Category: {item.category}</p>
             <p>Status: {item.status}</p>
             <p>{meta?.primaryUse ?? 'External platform sync'}</p>
-            {isMessagingHub ? <p>Provider paths: {messagingProviders.map((provider) => provider.name).join(', ')}</p> : null}
+            {isMessagingHub ? <p>Provider paths: {visibleMessagingProviders.map((provider) => provider.name).join(', ')}</p> : null}
             {isDeveloperIntegration ? <p>Actual management: Settings &gt; Developer</p> : null}
           </div>
         </Panel>

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  mapApiCategoryToCategory,
   mapApiProductToProduct,
   mapProductToApiPayload,
   normalizeApiStatus,
@@ -47,7 +48,17 @@ const product: Product = {
   seoTitle: 'Premium Modal Hijab',
   seoDescription: 'Shop premium modal hijab.',
   slug: 'premium-modal-hijab',
-  variants: [],
+  variants: [
+    {
+      id: 'rose',
+      name: 'Rose',
+      sku: 'HIJAB-ROSE',
+      price: 129,
+      stock: 2,
+      stockState: 'Low Stock',
+      lastUpdated: '2026-05-25',
+    },
+  ],
 };
 
 assert.equal(toMinorUnits(129.9), 12990);
@@ -64,6 +75,17 @@ assert.equal(mappedProduct.compareAtPrice, 149);
 assert.equal(mappedProduct.stockState, 'Low Stock');
 assert.equal(mappedProduct.status, 'Active');
 assert.deepEqual(mappedProduct.tags, ['modal', 'premium']);
+assert.deepEqual(mappedProduct.variants, [
+  {
+    id: 'rose',
+    name: 'Rose',
+    sku: 'HIJAB-001-ROSE',
+    price: 129,
+    stock: 2,
+    stockState: 'Low Stock',
+    lastUpdated: '',
+  },
+]);
 
 const payload = mapProductToApiPayload(product);
 assert.equal(payload.category_id, 3);
@@ -73,5 +95,21 @@ assert.equal(payload.status, 'active');
 assert.equal(payload.thumbnail_url, 'https://example.com/hijab.jpg');
 assert.equal(payload.product_type, 'Hijab');
 assert.equal(payload.seo_title, 'Premium Modal Hijab');
+assert.deepEqual(payload.variants, product.variants);
+
+const mappedCategory = mapApiCategoryToCategory({
+  id: 9,
+  name: 'Evening Wear',
+  slug: 'evening-wear',
+  description: 'Formal collection',
+  status: 'hidden',
+  seo_title: 'Evening Wear SEO',
+  seo_description: 'Shop evening wear.',
+  cover_url: 'https://example.com/evening.jpg',
+  product_ids: [15, 16],
+});
+assert.equal(mappedCategory.id, '9');
+assert.equal(mappedCategory.status, 'Hidden');
+assert.deepEqual(mappedCategory.productIds, ['15', '16']);
 
 console.log('catalog api mapper tests passed');

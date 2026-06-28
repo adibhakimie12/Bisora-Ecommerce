@@ -34,4 +34,35 @@ class ProductReviewController extends Controller
 
         return response()->json(['data' => $review->fresh()]);
     }
+
+    public function export(Request $request): JsonResponse
+    {
+        $tenant = $request->attributes->get('tenant');
+        $reviews = ProductReview::query()
+            ->where('tenant_id', $tenant->id)
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'data' => $reviews,
+            'summary' => [
+                'total' => $reviews->count(),
+                'average_rating' => $reviews->count() === 0 ? 0 : round($reviews->avg('rating'), 2),
+                'pending' => $reviews->where('status', 'pending')->count(),
+                'approved' => $reviews->where('status', 'approved')->count(),
+                'featured' => $reviews->where('status', 'featured')->count(),
+                'hidden' => $reviews->where('status', 'hidden')->count(),
+            ],
+        ]);
+    }
+
+    public function destroy(Request $request, ProductReview $review): JsonResponse
+    {
+        $tenant = $request->attributes->get('tenant');
+        abort_unless($review->tenant_id === $tenant->id, 404);
+
+        $review->delete();
+
+        return response()->json(null, 204);
+    }
 }

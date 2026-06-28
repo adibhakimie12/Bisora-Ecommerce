@@ -31,6 +31,38 @@ class MediaApiTest extends TestCase
             ->assertJsonStructure(['data' => ['id', 'object_key', 'upload_url', 'headers']]);
     }
 
+    public function test_media_presign_returns_real_supabase_upload_url_when_supabase_disk_is_configured(): void
+    {
+        config([
+            'filesystems.default' => 'supabase',
+            'filesystems.disks.supabase.key' => 'test-access-key',
+            'filesystems.disks.supabase.secret' => 'test-secret-key',
+            'filesystems.disks.supabase.region' => 'ap-southeast-1',
+            'filesystems.disks.supabase.bucket' => 'public-storefront-media',
+            'filesystems.disks.supabase.endpoint' => 'https://project-ref.supabase.co/storage/v1/s3',
+            'filesystems.disks.supabase.url' => 'https://project-ref.supabase.co/storage/v1/object/public',
+        ]);
+        [$user, $tenant] = $this->createTenantUser();
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->withHeader('X-Tenant-Id', (string) $tenant->id)
+            ->postJson('/api/media/presign', [
+                'filename' => 'campaign hero.png',
+                'mime_type' => 'image/png',
+                'size_bytes' => 512000,
+                'owner_type' => 'product',
+                'owner_id' => 123,
+                'visibility' => 'public',
+            ])
+            ->assertCreated();
+
+        $uploadUrl = $response->json('data.upload_url');
+
+        $this->assertIsString($uploadUrl);
+        $this->assertStringStartsWith('https://project-ref.supabase.co/storage/v1/s3/public-storefront-media/', $uploadUrl);
+        $this->assertStringNotContainsString('local-upload-placeholder', $uploadUrl);
+    }
+
     public function test_media_presign_rejects_oversized_uploads(): void
     {
         [$user, $tenant] = $this->createTenantUser();

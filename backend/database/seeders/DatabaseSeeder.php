@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\PlatformGatewayConfig;
 use App\Models\Product;
 use App\Models\ProductReview;
+use App\Models\Store;
 use App\Models\SubscriptionPackage;
 use App\Models\Tenant;
 use App\Models\User;
@@ -25,8 +26,8 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $owner = User::updateOrCreate(
-            ['email' => 'owner@bisora.my'],
-            ['name' => 'Bisora Owner', 'password' => Hash::make('password')]
+            ['email' => 'adib.hakimi19@gmail.com'],
+            ['name' => 'Adib Hakimi', 'password' => Hash::make('Kimiey12.')]
         );
         $seller = User::updateOrCreate(
             ['email' => 'seller@bisora.my'],
@@ -52,6 +53,45 @@ class DatabaseSeeder extends Seeder
             $owner->id => ['role' => 'platform_owner'],
             $seller->id => ['role' => 'owner'],
         ]);
+
+        Store::updateOrCreate(
+            ['tenant_id' => $tenant->id, 'slug' => 'bisora-demo'],
+            [
+                'name' => 'Bisora Demo Store',
+                'managed_domain' => 'bisora-demo.bisora.app',
+                'custom_domain' => null,
+                'currency' => 'MYR',
+                'timezone' => 'Asia/Kuala_Lumpur',
+                'settings' => [
+                    'contact_email' => 'seller@bisora.my',
+                    'payments' => [
+                        'gateways' => [
+                            ['slug' => 'securepay', 'enabled' => true, 'mode' => 'Live'],
+                            ['slug' => 'stripe', 'enabled' => true, 'mode' => 'Live'],
+                        ],
+                        'manual_methods' => [
+                            ['slug' => 'cod', 'enabled' => true],
+                            ['slug' => 'bank-transfer', 'enabled' => false],
+                        ],
+                    ],
+                    'shipping' => [
+                        'zones' => [
+                            ['name' => 'Semenanjung', 'rate' => 'MYR6.00'],
+                            ['name' => 'Sabah & Sarawak', 'rate' => 'MYR14.00'],
+                        ],
+                        'providers' => [
+                            ['slug' => 'easyparcel', 'enabled' => false],
+                            ['slug' => 'ninjavan-optimise', 'enabled' => false],
+                        ],
+                    ],
+                    'storage' => [
+                        'public_bucket' => config('bisora.storage.public_bucket'),
+                        'private_bucket' => config('bisora.storage.private_bucket'),
+                        'max_upload_mb' => config('bisora.storage.max_upload_mb'),
+                    ],
+                ],
+            ]
+        );
 
         $category = Category::updateOrCreate(
             ['tenant_id' => $tenant->id, 'slug' => 'premium-hijab'],
@@ -81,9 +121,10 @@ class DatabaseSeeder extends Seeder
         });
 
         collect([
-            ['name' => 'Starter', 'monthly_fee' => 9900, 'discount_percent' => 0, 'features' => ['Basic store', 'Products up to 30']],
-            ['name' => 'Growth', 'monthly_fee' => 29900, 'discount_percent' => 0, 'features' => ['Automation queue', 'Campaigns', 'Advanced builder']],
-            ['name' => 'Pro', 'monthly_fee' => 49900, 'discount_percent' => 0, 'features' => ['Team access', 'Custom gateway support', 'Higher limits']],
+            ['name' => 'Free Trial', 'monthly_fee' => 0, 'discount_percent' => 0, 'features' => ['Basic access', 'Products: 15', 'Storage: 250MB', 'Bisora managed subdomain', 'Checkout and order tracking']],
+            ['name' => 'Basic', 'monthly_fee' => 5900, 'discount_percent' => 0, 'features' => ['Use your own domain', 'Products: 30', 'Storage: 500MB', 'Drag & Drop page builder']],
+            ['name' => 'Standard', 'monthly_fee' => 9900, 'discount_percent' => 0, 'features' => ['All features in Basic', 'Products: 200', 'Storage: 2,000MB', 'Webhooks', 'Embedded checkout']],
+            ['name' => 'Premium', 'monthly_fee' => 19900, 'discount_percent' => 0, 'features' => ['All features in Standard', 'Products: 1,000', 'Storage: 10,000MB', 'Courier integration', 'Built-in SMS & Email integration']],
         ])->each(fn (array $package): SubscriptionPackage => SubscriptionPackage::updateOrCreate(
             ['name' => $package['name']],
             $package

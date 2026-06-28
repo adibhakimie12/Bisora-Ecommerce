@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CustomerProfile;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Store;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -17,6 +18,8 @@ class AnalyticsController extends Controller
         $tenant = $request->attributes->get('tenant');
         $orders = $this->orders($tenant->id);
         $paidOrders = $orders->where('payment_status', 'paid');
+        $productCount = Product::where('tenant_id', $tenant->id)->count();
+        $store = Store::query()->where('tenant_id', $tenant->id)->first();
 
         return response()->json([
             'data' => [
@@ -24,10 +27,11 @@ class AnalyticsController extends Controller
                     'revenue' => $paidOrders->sum('total'),
                     'orders' => $orders->count(),
                     'customers' => CustomerProfile::where('tenant_id', $tenant->id)->count(),
-                    'products' => Product::where('tenant_id', $tenant->id)->count(),
+                    'products' => $productCount,
                     'conversion_rate' => 3.42,
                     'net_profit' => (int) round($paidOrders->sum('total') * 0.62),
                 ],
+                'onboarding' => $this->onboarding($productCount, $store),
                 'revenue_trend' => $this->revenueTrend($orders),
                 'recent_orders' => $orders->take(5)->values(),
                 'activity' => $orders->take(4)->map(fn (Order $order): array => [
@@ -80,6 +84,58 @@ class AnalyticsController extends Controller
             ->latest('ordered_at')
             ->latest()
             ->get();
+    }
+
+    private function onboarding(int $productCount, ?Store $store): array
+    {
+        $settings = $store?->settings ?? [];
+        $paymentGateways = collect(data_get($settings, 'payments.gateways', []));
+        $shippingProviders = collect(data_get($settings, 'shipping.providers', []));
+        $hasPayment = $paymentGateways->contains(fn (array $gateway): bool => (bool) ($gateway['enabled_at_checkout'] ?? $gateway['enabled'] ?? false));
+        $hasShipping = $shippingProviders->contains(fn (array $provider): bool => (bool) ($provider['enabled'] ?? false));
+        $hasStorefront = data_get($settings, 'storefront.status') === 'live';
+
+        $items = [
+            [
+                'key' => 'add_first_product',
+                'title' => 'Add first product',
+                'description' => 'Create at least one active catalog item so the storefront has something to sell.',
+                'href' => '#/products/new',
+                'completed' => $productCount > 0,
+            ],
+            [
+                'key' => 'connect_payment',
+                'title' => 'Connect payment',
+                'description' => 'Enable at least one checkout payment method before sharing the store.',
+                'href' => '#/settings/payments',
+                'completed' => $hasPayment,
+            ],
+            [
+                'key' => 'configure_shipping',
+                'title' => 'Configure shipping',
+                'description' => 'Turn on a shipping provider or routing path for fulfilment.',
+                'href' => '#/settings/shipping-logistics',
+                'completed' => $hasShipping,
+            ],
+            [
+                'key' => 'publish_storefront',
+                'title' => 'Publish storefront',
+                'description' => 'Confirm storefront domain and branding before inviting customers.',
+                'href' => '#/settings/domain-branding',
+                'completed' => $hasStorefront,
+            ],
+        ];
+
+        $completed = collect($items)->where('completed', true)->count();
+
+        return [
+            'progress' => [
+                'completed' => $completed,
+                'total' => count($items),
+                'percent' => (int) round(($completed / count($items)) * 100),
+            ],
+            'items' => $items,
+        ];
     }
 
     private function revenueTrend(Collection $orders): Collection

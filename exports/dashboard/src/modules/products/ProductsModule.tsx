@@ -35,6 +35,9 @@ import {
 } from 'lucide-react';
 import { categories, productKpiMetrics, products } from './data';
 import { saveProductToApi, useStorefrontProducts } from '../storefront/productStore';
+import { createCatalogApi } from '../../api/catalog';
+import { uploadMediaFile } from '../../api/media';
+import { ApiError } from '../../api/http';
 import { ProductStatusBadge } from './ProductStatusBadge';
 import type { Category, CategoryDetailTab, Product, ProductTab, StockState } from './types';
 
@@ -76,6 +79,24 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
     return () => window.clearTimeout(timeout);
   }, [banner]);
 
+  useEffect(() => {
+    let isMounted = true;
+    createCatalogApi()
+      .listCategories()
+      .then((records) => {
+        if (isMounted) {
+          setCategoryRecords(records);
+        }
+      })
+      .catch(() => {
+        // Keep bundled categories usable when backend credentials are not ready.
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const showBanner = (title: string, description: string) => setBanner({ title, description });
   const showDialog = (title: string, description: string, confirmLabel = 'Close') =>
     setDialog({ title, description, confirmLabel });
@@ -95,23 +116,29 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
         onPreview={() => showDialog('Preview prepared', `${product.title} preview is ready for storefront checking.`)}
         productRecords={productRecords}
         onSave={(record, isNewProduct) => {
+          const previousRecords = productRecords;
           setProductRecords((current) => {
             const nextRecords = isNewProduct
               ? [record, ...current.filter((item) => item.id !== record.id)]
               : current.map((item) => (item.id === record.id ? record : item));
             return nextRecords;
           });
-          void saveProductToApi(record, isNewProduct).then((savedRecord) => {
-            setProductRecords((current) =>
-              current.map((item) => (item.id === record.id ? savedRecord : item)),
-            );
-          });
+          void saveProductToApi(record, isNewProduct)
+            .then((savedRecord) => {
+              setProductRecords((current) =>
+                current.map((item) => (item.id === record.id ? savedRecord : item)),
+              );
+            })
+            .catch((error: unknown) => {
+              setProductRecords(previousRecords);
+              const message = error instanceof ApiError ? error.message : 'Product could not be saved to backend.';
+              showDialog('Product save blocked', message, 'Review package');
+            });
           showBanner('Product saved', `${record.title} SEO, slug, and product changes were saved.`);
           if (isNewProduct) {
             window.location.hash = `/products/edit/${record.id}`;
           }
         }}
-        onUploadMedia={() => showDialog('Media uploader', 'Media upload and drag reorder will connect to storage in the backend phase.')}
       />
     );
   } else if (section === 'inventory') {
@@ -122,6 +149,16 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
           products={productRecords}
           onBulkAction={(action) => showBanner(action, `Inventory ${action.toLowerCase()} completed for selected variants in the current mock flow.`)}
           onRowAction={(title, description) => showBanner(title, description)}
+          onSaveInventory={(nextProducts) => {
+            const previousRecords = productRecords;
+            setProductRecords(nextProducts);
+            void Promise.all(nextProducts.map((product) => saveProductToApi(product)))
+              .then(() => showBanner('Inventory saved', 'Variant stock changes were saved to backend.'))
+              .catch((error: unknown) => {
+                setProductRecords(previousRecords);
+                showDialog('Inventory save failed', error instanceof ApiError ? error.message : 'Inventory changes could not be saved to backend.');
+              });
+          }}
         />
       </ProductsShell>
     );
@@ -135,6 +172,7 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
       <CategoryDetailPage
         activeTab={activeTab}
         category={category}
+        products={productRecords}
         onAddProduct={() => {
           const availableProduct = productRecords.find((productItem) => !category.productIds.includes(productItem.id));
           if (!availableProduct) {
@@ -149,10 +187,27 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
                 : item,
             ),
           );
+          const nextProduct = { ...availableProduct, categoryId: category.id, categoryName: category.name };
+          setProductRecords((current) =>
+            current.map((productItem) => (productItem.id === availableProduct.id ? nextProduct : productItem)),
+          );
+          void saveProductToApi(nextProduct).catch((error: unknown) => {
+            showDialog('Add product failed', error instanceof ApiError ? error.message : `${availableProduct.title} could not be added to backend category.`);
+          });
           showBanner('Product added', `${availableProduct.title} was added to ${category.name}.`);
         }}
         onChangeCoverImage={() => showDialog('Cover image manager', `${category.name} cover image upload will connect during the storage/backend phase.`)}
-        onDelete={() => showDialog('Delete category', `${category.name} is protected in mock mode until real permissions are connected.`)}
+        onDelete={() => {
+          setCategoryRecords((current) => current.filter((item) => item.id !== category.id));
+          void createCatalogApi()
+            .deleteCategory(category.id)
+            .catch(() => {
+              setCategoryRecords((current) => [category, ...current]);
+              showDialog('Delete category failed', `${category.name} could not be deleted from backend.`);
+            });
+          showBanner('Category deleted', `${category.name} was removed from catalog.`);
+          window.location.hash = '/products/categories';
+        }}
         onPreview={() => showDialog('Category preview', `${category.name} preview is ready for collection page review.`)}
         onRemoveProduct={(product) => {
           setCategoryRecords((current) =>
@@ -162,9 +217,33 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
                 : item,
             ),
           );
+          const nextProduct = { ...product, categoryId: '', categoryName: 'Uncategorized' };
+          setProductRecords((current) =>
+            current.map((productItem) => (productItem.id === product.id ? nextProduct : productItem)),
+          );
+          void saveProductToApi(nextProduct).catch((error: unknown) => {
+            showDialog('Remove product failed', error instanceof ApiError ? error.message : `${product.title} could not be removed from backend category.`);
+          });
           showBanner('Product removed', `${product.title} was removed from ${category.name}.`);
         }}
-        onSave={() => showBanner('Category saved', `${category.name} settings were saved in the current mock workspace.`)}
+        onSave={(nextCategory) => {
+          const previousRecords = categoryRecords;
+          setCategoryRecords((current) =>
+            current.map((item) => (item.id === nextCategory.id ? nextCategory : item)),
+          );
+          void createCatalogApi()
+            .saveCategory(nextCategory)
+            .then((savedCategory) => {
+              setCategoryRecords((current) =>
+                current.map((item) => (item.id === nextCategory.id ? savedCategory : item)),
+              );
+            })
+            .catch((error: unknown) => {
+              setCategoryRecords(previousRecords);
+              showDialog('Category save blocked', error instanceof ApiError ? error.message : `${category.name} could not be saved to backend.`);
+            });
+          showBanner('Category saved', `${nextCategory.name} settings were saved.`);
+        }}
       />
     );
   } else if (section === 'categories') {
@@ -174,6 +253,18 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
           categories={categoryRecords}
           onCreateCategory={(category) => {
             setCategoryRecords((current) => [category, ...current]);
+            void createCatalogApi()
+              .saveCategory(category)
+              .then((savedCategory) => {
+                setCategoryRecords((current) =>
+                  current.map((item) => (item.id === category.id ? savedCategory : item)),
+                );
+                window.location.hash = `/products/categories/${savedCategory.id}`;
+              })
+              .catch((error: unknown) => {
+                setCategoryRecords((current) => current.filter((item) => item.id !== category.id));
+                showDialog('Category create blocked', error instanceof ApiError ? error.message : `${category.name} could not be created in backend.`);
+              });
             showBanner('Category created', `${category.name} was added and is ready for detail editing.`);
           }}
           onViewAnalytics={() => showDialog('Category analytics', 'Merchandising analytics will plug into Reports after backend analytics is connected.')}
@@ -187,18 +278,36 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
           categories={categoryRecords}
           products={productRecords}
           onArchive={(product) => {
+            const nextProduct = { ...product, status: 'Hidden' as const };
             setProductRecords((current) =>
-              current.map((item) => (item.id === product.id ? { ...item, status: 'Hidden' } : item)),
+              current.map((item) => (item.id === product.id ? nextProduct : item)),
             );
+            void saveProductToApi(nextProduct).catch((error: unknown) => {
+              showDialog('Archive failed', error instanceof ApiError ? error.message : `${product.title} could not be archived in backend.`);
+            });
             showBanner('Product archived', `${product.title} was moved to Hidden status.`);
           }}
           onDelete={(product) => {
             setProductRecords((current) => current.filter((item) => item.id !== product.id));
+            void createCatalogApi().deleteProduct(product.id).catch((error: unknown) => {
+              setProductRecords((current) => [product, ...current]);
+              showDialog('Product delete failed', error instanceof ApiError ? error.message : `${product.title} could not be deleted in backend.`);
+            });
             showBanner('Product deleted', `${product.title} was removed from product listing.`);
           }}
           onDuplicate={(product) => {
             const duplicated = duplicateProduct(product);
             setProductRecords((current) => [duplicated, ...current]);
+            void saveProductToApi(duplicated, true)
+              .then((savedRecord) => {
+                setProductRecords((current) =>
+                  current.map((item) => (item.id === duplicated.id ? savedRecord : item)),
+                );
+              })
+              .catch((error: unknown) => {
+                setProductRecords((current) => current.filter((item) => item.id !== duplicated.id));
+                showDialog('Duplicate failed', error instanceof ApiError ? error.message : `${product.title} could not be duplicated in backend.`);
+              });
             showBanner('Product duplicated', `${product.title} was duplicated as ${duplicated.title}.`);
           }}
         />
@@ -456,11 +565,13 @@ function InventoryPage({
   categories,
   onBulkAction,
   onRowAction,
+  onSaveInventory,
 }: {
   products: Product[];
   categories: Category[];
   onBulkAction: (action: string) => void;
   onRowAction: (title: string, description: string) => void;
+  onSaveInventory: (products: Product[]) => void;
 }) {
   const todayLabel = useMemo(
     () =>
@@ -587,7 +698,31 @@ function InventoryPage({
   };
 
   const handleSaveInventoryChanges = () => {
-    onRowAction('Inventory saved', 'Inventory changes were saved in this frontend workspace.');
+    const nextProducts = products.map((product) => {
+      const nextVariants = product.variants
+        .filter((variant) => !deletedVariantIds.includes(variant.id))
+        .map((variant) => {
+          const stock = Number(stockMap.get(variant.id) ?? variant.stock);
+          return {
+            ...variant,
+            stock,
+            stockState: deriveStockState(stock),
+            lastUpdated: lastUpdatedMap.get(variant.id) ?? variant.lastUpdated,
+          };
+        });
+      const stock = nextVariants.reduce((sum, variant) => sum + variant.stock, 0);
+
+      return {
+        ...product,
+        variants: nextVariants,
+        stock,
+        stockState: deriveStockState(stock),
+      };
+    });
+
+    onSaveInventory(nextProducts);
+    setDeletedVariantIds([]);
+    onRowAction('Inventory saved', 'Inventory changes were queued for backend save.');
     onBulkAction('Save inventory changes');
   };
 
@@ -934,7 +1069,6 @@ function EditProductStudio({
   onPreview,
   onDuplicate,
   onSave,
-  onUploadMedia,
 }: {
   categoryOptions: Category[];
   productRecords: Product[];
@@ -942,7 +1076,6 @@ function EditProductStudio({
   onPreview: () => void;
   onDuplicate: () => void;
   onSave: (record: Product, isNewProduct: boolean) => void;
-  onUploadMedia: () => void;
 }) {
   const productEditorTabs = ['Item', 'Options', 'Variants', 'Images', 'Shipping', 'Categories', 'SEO'] as const;
   const isNewProduct = product.id === 'prod-new-draft';
@@ -958,6 +1091,7 @@ function EditProductStudio({
     categoryName: product.categoryName,
     tags: product.tags.join(', '),
     vendor: product.vendor,
+    thumbnailUrl: product.thumbnailUrl,
     slug: product.slug,
     seoTitle: product.seoTitle,
     seoDescription: product.seoDescription,
@@ -996,11 +1130,13 @@ function EditProductStudio({
   const [showImageModal, setShowImageModal] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const descriptionRef = useRef<HTMLDivElement | null>(null);
+  const mediaInputRef = useRef<HTMLInputElement | null>(null);
   const descriptionSelectionRef = useRef<Range | null>(null);
   const descriptionToolbarRef = useRef<HTMLDivElement | null>(null);
   const [selectedTextColor, setSelectedTextColor] = useState('#000000');
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [slugNotice, setSlugNotice] = useState('');
+  const [mediaUploadStatus, setMediaUploadStatus] = useState<'idle' | 'uploading' | 'error'>('idle');
 
   const updateForm = (field: keyof typeof form, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -1280,6 +1416,31 @@ function EditProductStudio({
     setPendingImageUrl('');
     setShowImageModal(false);
   };
+  const handleMediaFileChange = async (file?: File) => {
+    if (!file || mediaUploadStatus === 'uploading') {
+      return;
+    }
+
+    setMediaUploadStatus('uploading');
+
+    try {
+      const uploaded = await uploadMediaFile(file, {
+        ownerType: 'product',
+        ownerId: /^\d+$/.test(product.id) ? product.id : undefined,
+      });
+
+      if (!uploaded.publicUrl) {
+        throw new Error('Uploaded media did not return a public URL.');
+      }
+
+      updateForm('thumbnailUrl', uploaded.publicUrl);
+      setPendingImageUrl(uploaded.publicUrl);
+      setMediaUploadStatus('idle');
+    } catch {
+      setMediaUploadStatus('error');
+    }
+  };
+  const onUploadMedia = () => mediaInputRef.current?.click();
   const handleInsertVideo = () => {
     insertDescriptionHtml(`<iframe src="${pendingVideoUrl || 'https://'}" title="Product video"></iframe>`);
     setPendingVideoUrl('');
@@ -1303,6 +1464,7 @@ function EditProductStudio({
     const numericCompareAt = Number(form.compareAt) || 0;
     const numericStock = Number(form.quantity) || 0;
     const numericWeight = Number(form.weightKg) || 0;
+    const selectedCategory = categoryOptions.find((category) => category.name === form.categoryName);
     const nextId =
       isNewProduct
         ? `prod-${nextSlug}-${Date.now().toString().slice(-4)}`
@@ -1327,12 +1489,14 @@ function EditProductStudio({
       stock: numericStock,
       stockState: deriveStockState(numericStock),
       sku: form.sku.trim() || `${nextSlug.toUpperCase()}-001`,
+      categoryId: selectedCategory?.id ?? product.categoryId,
       categoryName: form.categoryName,
       tags: form.tags
         .split(',')
         .map((tag) => tag.trim())
         .filter(Boolean),
       vendor: form.vendor.trim() || 'Bisora',
+      thumbnailUrl: form.thumbnailUrl,
       slug: nextSlug,
       seoTitle: generatedSeoTitle,
       seoDescription: generatedSeoDescription,
@@ -1750,15 +1914,22 @@ function EditProductStudio({
           <Panel title="Media">
             <div className="space-y-3">
               <p className="text-xs text-on-surface-variant">
-                Current mock lets seller see image placement flow. Real file upload, optimization, and storage URL generation
-                will lock in during backend/storage integration.
+                Upload product images into storage and use the returned public URL as the storefront thumbnail.
               </p>
+              <input
+                ref={mediaInputRef}
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={(event) => void handleMediaFileChange(event.target.files?.[0])}
+                type="file"
+              />
               <div className="grid gap-3 sm:grid-cols-4">
-              <img alt="" className="h-32 w-full rounded object-cover" referrerPolicy="no-referrer" src={product.thumbnailUrl} />
-              <button className="grid h-32 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant" onClick={onUploadMedia} type="button">
-                <span className="flex items-center gap-2"><ImagePlus className="h-4 w-4" /> Add Images</span>
+              <img alt="" className="h-32 w-full rounded object-cover" referrerPolicy="no-referrer" src={form.thumbnailUrl} />
+              <button className="grid h-32 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-60" disabled={mediaUploadStatus === 'uploading'} onClick={onUploadMedia} type="button">
+                <span className="flex items-center gap-2"><ImagePlus className="h-4 w-4" /> {mediaUploadStatus === 'uploading' ? 'Uploading...' : 'Add Images'}</span>
               </button>
               </div>
+              {mediaUploadStatus === 'error' && <p className="text-xs text-error">Image upload failed. Check file type, size, and backend storage connection.</p>}
             </div>
           </Panel>
           )}
@@ -1938,7 +2109,7 @@ function EditProductStudio({
                     onClick={() => setSelectedVariantName(variant.name)}
                     type="button"
                   >
-                    <img alt="" className="h-10 w-10 rounded object-cover" referrerPolicy="no-referrer" src={product.thumbnailUrl} />
+                    <img alt="" className="h-10 w-10 rounded object-cover" referrerPolicy="no-referrer" src={form.thumbnailUrl} />
                     <span>{variant.name}</span>
                   </button>
                 ))}
@@ -1951,7 +2122,7 @@ function EditProductStudio({
                       <button className="rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low" onClick={onUploadMedia} type="button">
                         Add image
                       </button>
-                      <img alt="" className="h-14 w-14 rounded object-cover" referrerPolicy="no-referrer" src={product.thumbnailUrl} />
+                      <img alt="" className="h-14 w-14 rounded object-cover" referrerPolicy="no-referrer" src={form.thumbnailUrl} />
                     </div>
                   </div>
                   <div className="space-y-3 rounded border border-outline-variant/20 p-4">
@@ -2032,7 +2203,7 @@ function EditProductStudio({
                 <div key={variant.id} className="space-y-2">
                   <p className="text-sm font-medium">{variant.name}</p>
                   <div className="flex gap-3">
-                    <img alt="" className="h-20 w-20 rounded object-cover" referrerPolicy="no-referrer" src={product.thumbnailUrl} />
+                    <img alt="" className="h-20 w-20 rounded object-cover" referrerPolicy="no-referrer" src={form.thumbnailUrl} />
                     <button className="grid h-20 w-20 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant" onClick={onUploadMedia} type="button">
                       +
                     </button>
@@ -2092,7 +2263,7 @@ function EditProductStudio({
         <aside className="space-y-6">
           <Panel title="Live Preview">
             <div className="space-y-4 rounded border border-outline-variant/20 p-4">
-              <img alt="" className="h-40 w-full rounded object-cover" referrerPolicy="no-referrer" src={product.thumbnailUrl} />
+              <img alt="" className="h-40 w-full rounded object-cover" referrerPolicy="no-referrer" src={form.thumbnailUrl} />
               <div className="space-y-2">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -2292,6 +2463,7 @@ function EditProductStudio({
 
 function CategoryDetailPage({
   category,
+  products,
   activeTab,
   onAddProduct,
   onChangeCoverImage,
@@ -2301,14 +2473,25 @@ function CategoryDetailPage({
   onSave,
 }: {
   category: Category;
+  products: Product[];
   activeTab: CategoryDetailTab;
   onAddProduct: () => void;
   onChangeCoverImage: () => void;
   onPreview: () => void;
   onDelete: () => void;
   onRemoveProduct: (product: Product) => void;
-  onSave: () => void;
+  onSave: (category: Category) => void;
 }) {
+  const [draft, setDraft] = useState(category);
+
+  useEffect(() => {
+    setDraft(category);
+  }, [category]);
+
+  const updateDraft = <K extends keyof Category>(key: K, value: Category[K]) => {
+    setDraft((current) => ({ ...current, [key]: value }));
+  };
+
   return (
     <div className="space-y-6">
       <button className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline" onClick={() => (window.location.hash = '/products/categories')} type="button">
@@ -2319,7 +2502,7 @@ function CategoryDetailPage({
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <p className="text-sm text-on-surface-variant">Products / Categories</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">{category.name}</h1>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">{draft.name}</h1>
           <p className="mt-2 text-sm text-on-surface-variant">Manage category settings and product arrangement.</p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -2328,7 +2511,7 @@ function CategoryDetailPage({
             <Trash2 className="h-4 w-4" />
             Delete
           </button>
-          <button className="inline-flex items-center gap-2 rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim" onClick={onSave} type="button">
+          <button className="inline-flex items-center gap-2 rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim" onClick={() => onSave(draft)} type="button">
             <Save className="h-4 w-4" />
             Save
           </button>
@@ -2344,7 +2527,7 @@ function CategoryDetailPage({
             }`}
             onClick={() => {
               const tabSlug = tab === 'Category' ? '' : `/${slugify(tab)}`;
-              window.location.hash = `/products/categories/${category.id}${tabSlug}`;
+              window.location.hash = `/products/categories/${draft.id}${tabSlug}`;
             }}
             type="button"
           >
@@ -2353,28 +2536,30 @@ function CategoryDetailPage({
         ))}
       </div>
 
-      {activeTab === 'Category' && <CategorySettingsTab category={category} onChangeCoverImage={onChangeCoverImage} />}
-      {activeTab === 'Category Products' && <CategoryProductsTab category={category} onAddProduct={onAddProduct} onRemoveProduct={onRemoveProduct} />}
-      {activeTab === 'SEO' && <CategorySeoTab category={category} />}
+      {activeTab === 'Category' && <CategorySettingsTab category={draft} onChange={updateDraft} onChangeCoverImage={onChangeCoverImage} />}
+      {activeTab === 'Category Products' && <CategoryProductsTab category={draft} products={products} onAddProduct={onAddProduct} onRemoveProduct={onRemoveProduct} />}
+      {activeTab === 'SEO' && <CategorySeoTab category={draft} onChange={updateDraft} />}
     </div>
   );
 }
 
 function CategorySettingsTab({
   category,
+  onChange,
   onChangeCoverImage,
 }: {
   category: Category;
+  onChange: <K extends keyof Category>(key: K, value: Category[K]) => void;
   onChangeCoverImage: () => void;
 }) {
   return (
     <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <Panel title="General Information">
         <div className="space-y-4">
-          <Field label="Category name" value={category.name} />
+          <Field label="Category name" onChange={(value) => onChange('name', value)} value={category.name} />
           <label className="block space-y-2 text-sm font-medium">
             <span>Description</span>
-            <textarea className="min-h-32 w-full rounded border border-outline-variant/30 bg-surface px-3 py-2" defaultValue={category.description} />
+            <textarea className="min-h-32 w-full rounded border border-outline-variant/30 bg-surface px-3 py-2" onChange={(event) => onChange('description', event.target.value)} value={category.description} />
           </label>
         </div>
       </Panel>
@@ -2384,11 +2569,11 @@ function CategorySettingsTab({
           <div className="space-y-4">
             <label className="flex items-center justify-between rounded border border-outline-variant/20 p-4 text-sm">
               <span>Published</span>
-              <input defaultChecked={category.status === 'Published'} type="checkbox" />
+              <input checked={category.status === 'Published'} onChange={() => onChange('status', 'Published')} type="checkbox" />
             </label>
             <label className="flex items-center justify-between rounded border border-outline-variant/20 p-4 text-sm">
               <span>Hidden</span>
-              <input defaultChecked={category.status === 'Hidden'} type="checkbox" />
+              <input checked={category.status === 'Hidden'} onChange={() => onChange('status', 'Hidden')} type="checkbox" />
             </label>
           </div>
         </Panel>
@@ -2405,10 +2590,12 @@ function CategorySettingsTab({
 
 function CategoryProductsTab({
   category,
+  products,
   onAddProduct,
   onRemoveProduct,
 }: {
   category: Category;
+  products: Product[];
   onAddProduct: () => void;
   onRemoveProduct: (product: Product) => void;
 }) {
@@ -2499,17 +2686,23 @@ function CategoryProductsTab({
   );
 }
 
-function CategorySeoTab({ category }: { category: Category }) {
+function CategorySeoTab({
+  category,
+  onChange,
+}: {
+  category: Category;
+  onChange: <K extends keyof Category>(key: K, value: Category[K]) => void;
+}) {
   return (
     <div className="space-y-6">
       <Panel title="Search Engine Optimization">
         <div className="space-y-4">
-          <Field label="Meta Title" value={category.seoTitle} />
+          <Field label="Meta Title" onChange={(value) => onChange('seoTitle', value)} value={category.seoTitle} />
           <label className="block space-y-2 text-sm font-medium">
             <span>Meta Description</span>
-            <textarea className="min-h-28 w-full rounded border border-outline-variant/30 bg-surface px-3 py-2" defaultValue={category.seoDescription} />
+            <textarea className="min-h-28 w-full rounded border border-outline-variant/30 bg-surface px-3 py-2" onChange={(event) => onChange('seoDescription', event.target.value)} value={category.seoDescription} />
           </label>
-          <Field label="URL Slug" value={category.slug} />
+          <Field label="URL Slug" onChange={(value) => onChange('slug', slugify(value))} value={category.slug} />
         </div>
       </Panel>
 

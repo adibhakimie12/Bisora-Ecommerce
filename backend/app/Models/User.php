@@ -6,6 +6,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -40,5 +41,38 @@ class User extends Authenticatable
     public function isPlatformOwner(): bool
     {
         return strcasecmp($this->email, (string) config('bisora.owner_email')) === 0;
+    }
+
+    public function sessionTenants(): Collection
+    {
+        if ($this->isPlatformOwner()) {
+            return Tenant::query()
+                ->select('id', 'name', 'slug', 'plan', 'billing_status', 'access_status')
+                ->orderBy('name')
+                ->get()
+                ->map(fn (Tenant $tenant): array => [
+                    'id' => $tenant->id,
+                    'name' => $tenant->name,
+                    'slug' => $tenant->slug,
+                    'plan' => $tenant->plan,
+                    'billing_status' => $tenant->billing_status,
+                    'access_status' => $tenant->access_status,
+                    'role' => 'platform_owner',
+                ]);
+        }
+
+        return $this->tenants()
+            ->select('tenants.id', 'tenants.name', 'tenants.slug', 'tenants.plan', 'tenants.billing_status', 'tenants.access_status')
+            ->orderBy('tenants.name')
+            ->get()
+            ->map(fn (Tenant $tenant): array => [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'slug' => $tenant->slug,
+                'plan' => $tenant->plan,
+                'billing_status' => $tenant->billing_status,
+                'access_status' => $tenant->access_status,
+                'role' => $tenant->pivot->role,
+            ]);
     }
 }

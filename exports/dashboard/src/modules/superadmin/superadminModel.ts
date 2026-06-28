@@ -33,6 +33,13 @@ export interface PlatformGatewayConfig {
   webhookUrl: string;
 }
 
+export const defaultSubscriptionPackages: SubscriptionPackage[] = [
+  { id: 'free-trial', name: 'Free Trial', monthlyFee: 0, discountPercent: 0, features: ['Basic access', 'Products: 15', 'Storage: 250MB', 'Bisora managed subdomain', 'Checkout and order tracking'] },
+  { id: 'basic', name: 'Basic', monthlyFee: 59, discountPercent: 0, features: ['Use your own domain', 'Products: 30', 'Storage: 500MB', 'Drag & Drop page builder'] },
+  { id: 'standard', name: 'Standard', monthlyFee: 99, discountPercent: 0, features: ['All features in Basic', 'Products: 200', 'Storage: 2,000MB', 'Webhooks', 'Embedded checkout'] },
+  { id: 'premium', name: 'Premium', monthlyFee: 199, discountPercent: 0, features: ['All features in Standard', 'Products: 1,000', 'Storage: 10,000MB', 'Courier integration', 'Built-in SMS & Email integration'] },
+];
+
 export function getTenantAccessState(tenant: TenantAccount) {
   if (tenant.accessStatus === 'Terminated') {
     return 'Terminated';

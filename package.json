@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "npm --prefix exports/dashboard run dev",
+    "local": "powershell -ExecutionPolicy Bypass -File tools/start-local.ps1",
+    "local:watch": "powershell -ExecutionPolicy Bypass -File tools/start-local.ps1 -Watch",
     "build": "npm --prefix exports/dashboard run build",
     "preview": "npm --prefix exports/dashboard run preview",
     "lint": "npm --prefix exports/dashboard run lint"

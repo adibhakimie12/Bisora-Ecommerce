@@ -1,0 +1,91 @@
+{
+  "pages": [
+    {
+      "id": "homepage",
+      "title": "Homepage",
+      "purpose": "Main storefront page built inside Builder Studio.",
+      "status": "Managed in Builder",
+      "pageType": "Homepage",
+      "heroHeading": "Define Your Grace",
+      "subheading": "Editorial landing page designed to guide buyers into signature collections and premium edits.",
+      "cta": "Shop The Edit",
+      "seoTitle": "Lumiere Noor Homepage | Luxury Modestwear",
+      "metaDescription": "Discover Lumiere Noor luxury modestwear through a refined homepage experience built to guide buyers into curated edits.",
+      "primaryKeyword": "luxury modestwear",
+      "slug": "/",
+      "openGraphImage": "https://picsum.photos/seed/category-evening/480/240",
+      "slugManuallyEdited": true
+    },
+    {
+      "id": "collection",
+      "title": "Collection Page",
+      "purpose": "Catalogue page for category browsing, filters, and product discovery.",
+      "status": "Managed in Builder",
+      "pageType": "Collection",
+      "heroHeading": "The Spring Edit",
+      "subheading": "A collection page that helps buyers browse clearly while still feeling premium and calm.",
+      "cta": "View Collection",
+      "seoTitle": "Spring Collection | Lumiere Noor",
+      "metaDescription": "Browse the Spring Collection from Lumiere Noor with curated modestwear pieces designed for elegant daily and occasion styling.",
+      "primaryKeyword": "spring collection modestwear",
+      "slug": "/collections/spring-edit",
+      "openGraphImage": "https://picsum.photos/seed/category-everyday/480/240",
+      "slugManuallyEdited": true
+    },
+    {
+      "id": "about",
+      "title": "About The Brand",
+      "purpose": "Brand story, trust, mission, and signature aesthetic.",
+      "status": "Published",
+      "pageType": "Custom Page",
+      "heroHeading": "A Quiet Luxury Story",
+      "subheading": "Tell buyers why the brand exists, what it values, and what makes the design perspective distinct.",
+      "cta": "Read Our Story",
+      "seoTitle": "A Quiet Luxury Story | about lumiere noor",
+      "metaDescription": "about lumiere noor. Brand story, trust, mission, and signature aesthetic. Tell buyers why the brand exists, what it values, and what makes the design pe...",
+      "primaryKeyword": "about lumiere noor",
+      "slug": "/about-the-brand",
+      "openGraphImage": "https://picsum.photos/seed/category-evening/480/240",
+      "slugManuallyEdited": false
+    },
+    {
+      "id": "size-guide",
+      "title": "Size Guide",
+      "purpose": "Sizing help, fit notes, and buying confidence.",
+      "status": "Published",
+      "pageType": "Support Page",
+      "heroHeading": "Find Your Best Fit",
+      "subheading": "Help buyers choose the right size with less hesitation and fewer support questions.",
+      "cta": "Check Size Guide",
+      "seoTitle": "Size Guide",
+      "metaDescription": "Use the Lumiere Noor size guide to choose the right fit before placing your order.",
+      "primaryKeyword": "abaya size guide",
+      "slug": "/pages/size-guide",
+      "openGraphImage": "https://picsum.photos/seed/category-everyday/480/240",
+      "slugManuallyEdited": true
+    },
+    {
+      "id": "contact",
+      "title": "Contact & Support",
+      "purpose": "Store contact methods, support hours, and inquiry form.",
+      "status": "Draft",
+      "pageType": "Support Page",
+      "heroHeading": "We Are Here To Help",
+      "subheading": "Give buyers a simple way to contact the store about orders, sizing, or delivery questions.",
+      "cta": "Contact Support",
+      "seoTitle": "Contact & Support",
+      "metaDescription": "Reach Lumiere Noor support for order help, store inquiries, and delivery questions.",
+      "primaryKeyword": "contact lumiere noor",
+      "slug": "/pages/contact",
+      "openGraphImage": "https://picsum.photos/seed/category-season/480/240",
+      "slugManuallyEdited": true
+    }
+  ],
+  "pageLastmod": {
+    "homepage": "2026-04-23T07:09:45.921Z",
+    "collection": "2026-04-23T07:09:45.921Z",
+    "about": "2026-04-23T07:09:45.921Z",
+    "size-guide": "2026-04-23T07:09:45.921Z",
+    "contact": "2026-04-23T07:09:45.921Z"
+  }
+}

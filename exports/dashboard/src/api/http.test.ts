@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { ApiError, API_STORAGE_KEYS, createApiClient } from './http';
+import { ApiError, API_STORAGE_KEYS, createApiClient, resolveApiBaseUrl } from './http';
 
 function createMemoryStorage() {
   const records = new Map<string, string>();
@@ -35,6 +35,39 @@ async function testLoginStoresTokenAndTenant() {
   assert.equal(result.token, 'token-123');
   assert.equal(storage.getItem(API_STORAGE_KEYS.token), 'token-123');
   assert.equal(storage.getItem(API_STORAGE_KEYS.tenantId), '99');
+}
+
+async function testTrialSignupStoresSession() {
+  const storage = createMemoryStorage();
+  const calls: Array<{ url: string; init: RequestInit }> = [];
+  const client = createApiClient({
+    baseUrl: 'https://api.bisora.test/api',
+    storage,
+    fetcher: async (url, init) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return new Response(
+        JSON.stringify({
+          token: 'trial-token-123',
+          user: { id: 7, email: 'aina@example.test', name: 'Aina Merchant', is_platform_owner: false },
+          tenants: [{ id: 77, name: 'Aina Raya Store', slug: 'aina-raya-store', role: 'owner', billing_status: 'trial' }],
+        }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } },
+      );
+    },
+  });
+
+  await client.auth.startTrial({
+    name: 'Aina Merchant',
+    email: 'aina@example.test',
+    password: 'secure-pass-123',
+    storeName: 'Aina Raya Store',
+  });
+
+  assert.equal(calls[0].url, 'https://api.bisora.test/api/auth/trial');
+  assert.equal(calls[0].init.method, 'POST');
+  assert.equal(JSON.parse(calls[0].init.body as string).store_name, 'Aina Raya Store');
+  assert.equal(storage.getItem(API_STORAGE_KEYS.token), 'trial-token-123');
+  assert.equal(storage.getItem(API_STORAGE_KEYS.tenantId), '77');
 }
 
 async function testCatalogRequestsSendAuthAndTenantHeaders() {
@@ -83,7 +116,28 @@ async function testApiErrorCarriesStatusAndPayload() {
   );
 }
 
+function testLocalDevUsesLaravelApiByDefault() {
+  const baseUrl = resolveApiBaseUrl({
+    env: { DEV: 'true' },
+    location: { hostname: '127.0.0.1' },
+  });
+
+  assert.equal(baseUrl, 'http://127.0.0.1:8000/api');
+}
+
+function testLanDevUsesLaravelApiByDefault() {
+  const baseUrl = resolveApiBaseUrl({
+    env: { DEV: 'true' },
+    location: { hostname: '192.168.0.10' },
+  });
+
+  assert.equal(baseUrl, 'http://127.0.0.1:8000/api');
+}
+
+testLocalDevUsesLaravelApiByDefault();
+testLanDevUsesLaravelApiByDefault();
 await testLoginStoresTokenAndTenant();
+await testTrialSignupStoresSession();
 await testCatalogRequestsSendAuthAndTenantHeaders();
 await testApiErrorCarriesStatusAndPayload();
 

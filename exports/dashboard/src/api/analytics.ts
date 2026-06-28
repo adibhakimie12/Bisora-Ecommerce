@@ -22,6 +22,22 @@ interface ApiDashboard {
     customer?: { name?: string; email?: string } | null;
   }>;
   activity: ActivityItem[];
+  onboarding?: OnboardingChecklist;
+}
+
+export interface OnboardingChecklist {
+  progress: {
+    completed: number;
+    total: number;
+    percent: number;
+  };
+  items: Array<{
+    key: string;
+    title: string;
+    description: string;
+    href: string;
+    completed: boolean;
+  }>;
 }
 
 interface ApiReportsOverview {
@@ -53,6 +69,16 @@ function titleCase(value: string) {
   return `${value.slice(0, 1).toUpperCase()}${value.slice(1).toLowerCase()}`;
 }
 
+export const defaultOnboardingChecklist: OnboardingChecklist = {
+  progress: { completed: 0, total: 4, percent: 0 },
+  items: [
+    { key: 'add_first_product', title: 'Add first product', description: 'Create at least one active catalog item.', href: '#/products/new', completed: false },
+    { key: 'connect_payment', title: 'Connect payment', description: 'Enable a checkout payment route.', href: '#/settings/payments', completed: false },
+    { key: 'configure_shipping', title: 'Configure shipping', description: 'Turn on fulfilment and shipping rules.', href: '#/settings/shipping-logistics', completed: false },
+    { key: 'publish_storefront', title: 'Publish storefront', description: 'Confirm domain and storefront branding.', href: '#/settings/domain-branding', completed: false },
+  ],
+};
+
 export function mapDashboardFromApi(payload: ApiDashboard) {
   const metrics: KpiMetric[] = [
     { label: 'Total Revenue', value: money(payload.metrics.revenue), change: '+0%', comparison: 'live tenant data', direction: 'up', icon: DollarSign, href: '#/reports' },
@@ -75,6 +101,7 @@ export function mapDashboardFromApi(payload: ApiDashboard) {
       href: `#/orders/${order.number}`,
     })),
     activity: payload.activity,
+    onboarding: payload.onboarding ?? defaultOnboardingChecklist,
   };
 }
 

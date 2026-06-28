@@ -15,6 +15,7 @@ class StoreCategoryRequest extends FormRequest
     public function rules(): array
     {
         $tenant = $this->attributes->get('tenant');
+        $categoryId = $this->route('category')?->id;
 
         return [
             'name' => ['required', 'string', 'max:120'],
@@ -23,7 +24,7 @@ class StoreCategoryRequest extends FormRequest
                 'string',
                 'max:160',
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-                Rule::unique('categories', 'slug')->where('tenant_id', $tenant->id),
+                Rule::unique('categories', 'slug')->where('tenant_id', $tenant->id)->ignore($categoryId),
             ],
             'description' => ['nullable', 'string', 'max:5000'],
             'status' => ['nullable', Rule::in(['published', 'hidden'])],

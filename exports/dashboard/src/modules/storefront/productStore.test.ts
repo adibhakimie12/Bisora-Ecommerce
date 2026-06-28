@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getProductSnapshot, loadProducts, saveProducts, subscribeProducts, syncProductsFromApi } from './productStore';
+import { getProductSnapshot, loadProducts, saveProductToApi, saveProducts, subscribeProducts, syncProductsFromApi } from './productStore';
 import type { Product } from '../products/types';
 
 class FakeStorage {
@@ -120,6 +120,36 @@ test('syncProductsFromApi hydrates shared snapshot when backend credentials exis
     await syncProductsFromApi();
     assert.equal(getProductSnapshot()[0]?.title, 'Backend Product');
     assert.equal(getProductSnapshot()[0]?.price, 25);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('saveProductToApi surfaces backend plan limit errors for product create', async () => {
+  const storage = new FakeStorage();
+  storage.setItem('bisora.apiToken', 'token-123');
+  storage.setItem('bisora.tenantId', '77');
+  globalThis.window = {
+    localStorage: storage,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as unknown as Window & typeof globalThis;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        message: 'Free Trial product limit reached. Upgrade package to add more products.',
+        limit: { plan: 'Free Trial', resource: 'products', max: 15, used: 15 },
+      }),
+      { status: 422, headers: { 'Content-Type': 'application/json' } },
+    );
+
+  try {
+    await assert.rejects(
+      () => saveProductToApi(createProduct('Blocked Product'), true),
+      /Free Trial product limit reached/,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

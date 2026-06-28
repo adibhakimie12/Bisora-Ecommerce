@@ -2,7 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowLeft, CheckCircle2, Mail, MoreHorizontal, Plus, Search, Star, X } from 'lucide-react';
 import { API_STORAGE_KEYS } from '../../api/http';
-import { fetchCustomers, fetchReviews, updateReviewStatus as updateReviewStatusApi } from '../../api/commerce';
+import {
+  addCustomerNote as addCustomerNoteApi,
+  contactCustomer as contactCustomerApi,
+  createCustomer as createCustomerApi,
+  deactivateCustomer as deactivateCustomerApi,
+  deleteCustomer as deleteCustomerApi,
+  deleteReview as deleteReviewApi,
+  exportReviewReport,
+  fetchCustomers,
+  fetchReviews,
+  updateCustomer as updateCustomerApi,
+  updateReviewStatus as updateReviewStatusApi,
+} from '../../api/commerce';
 import { initialCustomers, initialReviews } from './data';
 import type { Customer, CustomerOrderHistory, CustomerTag, ReviewRecord, ReviewStatus } from './types';
 
@@ -83,13 +95,31 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
     }
   };
 
-  const removeReview = (reviewId: string) => {
+  const removeReview = async (reviewId: string) => {
+    if (hasApiToken()) {
+      try {
+        await deleteReviewApi(reviewId);
+      } catch {
+        showBanner('Review delete failed', 'Backend could not delete this review. Local list was updated only.');
+      }
+    }
+
     setReviews((current) => current.filter((review) => review.id !== reviewId));
   };
 
-  const addCustomerNote = (targetCustomerId: string, message: string) => {
+  const addCustomerNote = async (targetCustomerId: string, message: string) => {
     const trimmedMessage = message.trim();
     if (!trimmedMessage) return;
+
+    if (hasApiToken()) {
+      try {
+        const updatedCustomer = await addCustomerNoteApi(targetCustomerId, trimmedMessage);
+        setCustomers((current) => current.map((customer) => (customer.id === updatedCustomer.id ? updatedCustomer : customer)));
+        return;
+      } catch {
+        showBanner('Note sync failed', 'Backend could not save this note. It will stay local until the next refresh.');
+      }
+    }
 
     setCustomers((current) =>
       current.map((customer) =>
@@ -98,9 +128,50 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
     );
   };
 
-  const upsertCustomer = (payload: { mode: CustomerActionMode; customer?: Customer; name: string; email: string; status: CustomerTag }) => {
+  const contactCustomer = async (targetCustomer: Customer, channel: 'Email' | 'WhatsApp') => {
+    if (!hasApiToken()) {
+      showBanner(`${channel} queued locally`, `${channel} action will sync after API login is active.`);
+      return;
+    }
+
+    try {
+      await contactCustomerApi(targetCustomer.id, channel, `Hi ${targetCustomer.name}, your store has an update for you.`);
+      showBanner(`${channel} queued`, `${channel} notification was added to the automation queue.`);
+    } catch {
+      showBanner(`${channel} failed`, `Backend could not queue ${channel}. Check package and provider settings.`);
+    }
+  };
+
+  const deactivateCustomer = async (targetCustomer: Customer) => {
+    if (hasApiToken()) {
+      try {
+        const updatedCustomer = await deactivateCustomerApi(targetCustomer.id);
+        setCustomers((current) => current.map((customer) => (customer.id === updatedCustomer.id ? updatedCustomer : customer)));
+        showBanner('Account deactivated', `${updatedCustomer.name} is now inactive.`);
+        return;
+      } catch {
+        showBanner('Deactivate sync failed', 'Backend could not deactivate this customer. Local view was updated only.');
+      }
+    }
+
+    setCustomers((current) => current.map((customer) => (customer.id === targetCustomer.id ? { ...customer, status: 'Inactive' } : customer)));
+    showBanner('Account deactivated', `${targetCustomer.name} is now inactive locally.`);
+  };
+
+  const upsertCustomer = async (payload: { mode: CustomerActionMode; customer?: Customer; name: string; email: string; status: CustomerTag }) => {
     const { mode, customer, name, email, status } = payload;
     if (mode === 'create') {
+      if (hasApiToken()) {
+        try {
+          const createdCustomer = await createCustomerApi({ name, email, status });
+          setCustomers((current) => [createdCustomer, ...current]);
+          showBanner('Customer created', `${createdCustomer.name} was added to CRM records.`);
+          return;
+        } catch {
+          showBanner('Customer sync failed', 'Backend could not create this customer. A local draft was added instead.');
+        }
+      }
+
       const id = `cust-${slugify(name)}-${Date.now().toString().slice(-4)}`;
       const newCustomer: Customer = {
         id,
@@ -123,6 +194,18 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
     }
 
     if (!customer) return;
+
+    if (hasApiToken()) {
+      try {
+        const updatedCustomer = await updateCustomerApi(customer.id, { name, email, status });
+        setCustomers((current) => current.map((item) => (item.id === customer.id ? updatedCustomer : item)));
+        showBanner('Customer updated', `${updatedCustomer.name} profile was updated.`);
+        return;
+      } catch {
+        showBanner('Customer sync failed', 'Backend could not update this customer. Local view was updated only.');
+      }
+    }
+
     setCustomers((current) =>
       current.map((item) =>
         item.id === customer.id
@@ -139,13 +222,13 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
         <CustomerProfilePage
           customer={selectedCustomer}
           onAddNote={(message) => {
-            addCustomerNote(selectedCustomer.id, message);
+            void addCustomerNote(selectedCustomer.id, message);
             showBanner('Internal note added', `New CRM note saved for ${selectedCustomer.name}.`);
           }}
           onBack={() => (window.location.hash = '/customers')}
-          onDeactivate={() => showBanner('Account deactivated', `${selectedCustomer.name} is now deactivated in mock workspace.`)}
-          onSendEmail={() => showBanner('Email triggered', `Email action queued for ${selectedCustomer.email}.`)}
-          onSendWhatsapp={() => showBanner('WhatsApp triggered', `WhatsApp action queued for ${selectedCustomer.name}.`)}
+          onDeactivate={() => void deactivateCustomer(selectedCustomer)}
+          onSendEmail={() => void contactCustomer(selectedCustomer, 'Email')}
+          onSendWhatsapp={() => void contactCustomer(selectedCustomer, 'WhatsApp')}
         />
       );
     }
@@ -154,7 +237,20 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
       return (
         <ReviewsPage
           reviews={reviews}
-          onExportReport={() => showBanner('Report exported', 'Customer review report generated for the current filter set.')}
+          onExportReport={async () => {
+            if (!hasApiToken()) {
+              showBanner('Report exported locally', 'Review report generated from demo data.');
+              return;
+            }
+
+            try {
+              const report = await exportReviewReport();
+              setReviews(report.reviews);
+              showBanner('Report exported', `${report.summary.total} reviews exported. Average rating ${report.summary.average_rating}.`);
+            } catch {
+              showBanner('Report export failed', 'Backend could not export review report.');
+            }
+          }}
           onModerate={(reviewId) => setShowModerationReviewId(reviewId)}
         />
       );
@@ -172,6 +268,11 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
         }}
         onCreateCustomer={() => setCustomerAction({ mode: 'create' })}
         onDeleteCustomer={(targetCustomer) => {
+          if (hasApiToken()) {
+            void deleteCustomerApi(targetCustomer.id).catch(() => {
+              showBanner('Delete sync failed', 'Backend could not delete this customer. Local list was updated only.');
+            });
+          }
           setCustomers((current) => current.filter((customer) => customer.id !== targetCustomer.id));
           showBanner('Customer deleted', `${targetCustomer.name} was removed from CRM listing.`);
         }}
@@ -184,7 +285,7 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
         }}
         onSaveNote={(targetCustomerId) => {
           if (!trimmedNoteDraft) return;
-          addCustomerNote(targetCustomerId, trimmedNoteDraft);
+          void addCustomerNote(targetCustomerId, trimmedNoteDraft);
           showBanner('Internal note added', 'Customer note added from All Customers table.');
           setNoteDraft('');
           setNoteDraftForCustomerId(null);
@@ -235,7 +336,7 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
           customer={customerAction.customer}
           onClose={() => setCustomerAction(null)}
           onSave={(payload) => {
-            upsertCustomer({ ...payload, mode: customerAction.mode, customer: customerAction.customer });
+            void upsertCustomer({ ...payload, mode: customerAction.mode, customer: customerAction.customer });
             setCustomerAction(null);
           }}
         />
@@ -251,7 +352,7 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
           }}
           onClose={() => setShowModerationReviewId(null)}
           onDelete={() => {
-            removeReview(selectedReview.id);
+            void removeReview(selectedReview.id);
             showBanner('Review deleted', 'Review removed from records.');
             setShowModerationReviewId(null);
           }}
@@ -325,6 +426,7 @@ function AllCustomersPage({
           <option value="VIP">VIP</option>
           <option value="Returning">Returning</option>
           <option value="New">New</option>
+          <option value="Inactive">Inactive</option>
         </select>
         <button className="inline-flex items-center gap-2 rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim" onClick={onCreateCustomer} type="button">
           <Plus className="h-4 w-4" />
@@ -521,7 +623,7 @@ function ReviewsPage({
   onModerate,
 }: {
   reviews: ReviewRecord[];
-  onExportReport: () => void;
+  onExportReport: () => void | Promise<void>;
   onModerate: (reviewId: string) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<'All' | ReviewStatus>('All');
@@ -553,7 +655,7 @@ function ReviewsPage({
           <h2 className="text-lg font-semibold">Reviews</h2>
           <p className="text-sm text-on-surface-variant">Manage and moderate customer feedback across your collection.</p>
         </div>
-        <button className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim" onClick={onExportReport} type="button">
+        <button className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim" onClick={() => void onExportReport()} type="button">
           Export Report
         </button>
       </section>
@@ -737,6 +839,7 @@ function CustomerActionModal({
               <option value="VIP">VIP</option>
               <option value="Returning">Returning</option>
               <option value="New">New</option>
+              <option value="Inactive">Inactive</option>
             </select>
           </label>
         </div>
@@ -823,6 +926,7 @@ function CustomerTagBadge({ status }: { status: CustomerTag }) {
     VIP: 'bg-warning/15 text-warning',
     Returning: 'bg-secondary/15 text-secondary',
     New: 'bg-surface-low text-on-surface-variant',
+    Inactive: 'bg-error/10 text-error',
   };
   return <span className={`inline-flex rounded px-2 py-1 text-xs font-medium ${classes[status]}`}>{status}</span>;
 }

@@ -123,12 +123,8 @@ export async function saveProductToApi(record: Product, isNewProduct = false) {
     return record;
   }
 
-  try {
-    const api = createCatalogApi();
-    return isNewProduct ? await api.createProduct(record) : await api.saveProduct(record);
-  } catch {
-    return record;
-  }
+  const api = createCatalogApi();
+  return isNewProduct ? await api.createProduct(record) : await api.saveProduct(record);
 }
 
 export function useStorefrontProducts() {

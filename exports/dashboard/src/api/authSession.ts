@@ -80,6 +80,17 @@ export function getStoredSession(storage: ApiStorage | undefined = getDefaultSto
   };
 }
 
+export function setActiveTenant(tenantId: string, storage: ApiStorage | undefined = getDefaultStorage()): AdminSession | null {
+  const session = getStoredSession(storage);
+  if (!storage || !session?.tenants.some((tenant) => tenant.id === tenantId)) {
+    return null;
+  }
+
+  storage.setItem(API_STORAGE_KEYS.tenantId, tenantId);
+
+  return getStoredSession(storage);
+}
+
 export function clearStoredSession(storage: ApiStorage | undefined = getDefaultStorage()) {
   if (!storage) return;
 

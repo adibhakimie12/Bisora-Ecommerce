@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { API_STORAGE_KEYS } from './http';
-import { clearStoredSession, getStoredSession, saveStoredSession } from './authSession';
+import { clearStoredSession, getStoredSession, saveStoredSession, setActiveTenant } from './authSession';
 
 function createMemoryStorage() {
   const records = new Map<string, string>();
@@ -48,7 +48,47 @@ function testClearsAllSessionStorage() {
   assert.equal(storage.getItem(API_STORAGE_KEYS.tenants), null);
 }
 
+function testSwitchesActiveTenantWhenTenantExists() {
+  const storage = createMemoryStorage();
+
+  saveStoredSession(
+    {
+      token: 'token-123',
+      user: { id: 1, name: 'Owner', email: 'adib.hakimi19@gmail.com', is_platform_owner: true },
+      tenants: [
+        { id: 5, name: 'Alpha Store', slug: 'alpha-store', role: 'platform_owner' },
+        { id: 9, name: 'Beta Store', slug: 'beta-store', role: 'platform_owner' },
+      ],
+    },
+    storage,
+  );
+
+  const nextSession = setActiveTenant('9', storage);
+
+  assert.equal(storage.getItem(API_STORAGE_KEYS.tenantId), '9');
+  assert.equal(nextSession?.activeTenantId, '9');
+  assert.equal(nextSession?.tenants.length, 2);
+}
+
+function testRejectsUnknownActiveTenant() {
+  const storage = createMemoryStorage();
+
+  saveStoredSession(
+    {
+      token: 'token-123',
+      user: { id: 1, name: 'Owner', email: 'adib.hakimi19@gmail.com', is_platform_owner: true },
+      tenants: [{ id: 5, name: 'Alpha Store', slug: 'alpha-store', role: 'platform_owner' }],
+    },
+    storage,
+  );
+
+  assert.equal(setActiveTenant('99', storage), null);
+  assert.equal(storage.getItem(API_STORAGE_KEYS.tenantId), '5');
+}
+
 testStoresAndReadsLoginSession();
 testClearsAllSessionStorage();
+testSwitchesActiveTenantWhenTenantExists();
+testRejectsUnknownActiveTenant();
 
 console.log('auth session tests passed');

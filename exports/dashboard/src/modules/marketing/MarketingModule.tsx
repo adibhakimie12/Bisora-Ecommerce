@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   Bot,
@@ -16,6 +16,8 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
+import { ApiError } from '../../api/http';
+import { fetchMarketingWorkspace, queueBroadcast, queueRecoveryReminder, saveMarketingCollection } from '../../api/marketing';
 import {
   automationRulesSeed,
   broadcastsSeed,
@@ -81,6 +83,7 @@ export function MarketingModule({ section, subSection }: MarketingModuleProps) {
   const [broadcasts, setBroadcasts] = useState(broadcastsSeed);
   const [funnelSteps] = useState(funnelStepsSeed);
   const [automationRules, setAutomationRules] = useState(automationRulesSeed);
+  const marketingHydratedRef = useRef(false);
 
   const [showFunnelWizard, setShowFunnelWizard] = useState(false);
   const [funnelWizardStep, setFunnelWizardStep] = useState<1 | 2 | 3>(1);
@@ -92,6 +95,43 @@ export function MarketingModule({ section, subSection }: MarketingModuleProps) {
   });
 
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
+
+  useEffect(() => {
+    fetchMarketingWorkspace()
+      .then((workspace) => {
+        if (workspace.initialized) {
+          setDiscounts(workspace.discounts);
+          setUpsells(workspace.upsells);
+          setRecoveryRows(workspace.recovery);
+          setBroadcasts(workspace.broadcasts);
+          setAutomationRules(workspace.automationRules);
+        }
+        marketingHydratedRef.current = true;
+      })
+      .catch(() => {
+        marketingHydratedRef.current = true;
+      });
+  }, []);
+
+  useEffect(() => {
+    if (marketingHydratedRef.current) void saveMarketingCollection('discounts', discounts);
+  }, [discounts]);
+
+  useEffect(() => {
+    if (marketingHydratedRef.current) void saveMarketingCollection('upsells', upsells);
+  }, [upsells]);
+
+  useEffect(() => {
+    if (marketingHydratedRef.current) void saveMarketingCollection('recovery', recoveryRows);
+  }, [recoveryRows]);
+
+  useEffect(() => {
+    if (marketingHydratedRef.current) void saveMarketingCollection('broadcasts', broadcasts);
+  }, [broadcasts]);
+
+  useEffect(() => {
+    if (marketingHydratedRef.current) void saveMarketingCollection('automation-rules', automationRules);
+  }, [automationRules]);
 
   useEffect(() => {
     if (!banner) {
@@ -109,6 +149,8 @@ export function MarketingModule({ section, subSection }: MarketingModuleProps) {
   const openDialog = (title: string, description: string, ctaLabel = 'Close') => {
     setDialog({ title, description, ctaLabel });
   };
+
+  const errorMessage = (error: unknown) => (error instanceof ApiError ? error.message : 'Check API connection and provider setup before trying again.');
 
   return (
     <>
@@ -250,7 +292,14 @@ export function MarketingModule({ section, subSection }: MarketingModuleProps) {
               rows={recoveryRows}
               onOpenFlowBuilder={() => (window.location.hash = '/marketing/recovery/flow-builder')}
               onOpenTemplates={() => (window.location.hash = '/marketing/recovery/templates')}
-              onRemind={(id) => notify('Reminder sent', `Recovery reminder triggered for ${id}.`)}
+              onRemind={(id) => {
+                queueRecoveryReminder(id)
+                  .then((workspace) => {
+                    setRecoveryRows(workspace.recovery);
+                    notify('Reminder queued', `Recovery reminder queued for ${id}.`);
+                  })
+                  .catch((error) => notify('Reminder not queued', errorMessage(error)));
+              }}
               onMarkRecovered={(id) => {
                 setRecoveryRows((current) =>
                   current.map((row) => (row.id === id ? { ...row, status: 'Recovered' } : row)),
@@ -276,6 +325,11 @@ export function MarketingModule({ section, subSection }: MarketingModuleProps) {
               campaigns={broadcasts}
               onCreate={() => (window.location.hash = '/marketing/broadcasts/new')}
               onExport={() => notify('Broadcast export ready', 'Campaign delivery export has been generated.')}
+              onQueue={(campaign) => {
+                queueBroadcast(campaign.id)
+                  .then((response) => notify('Broadcast queued', `${campaign.name} queued for ${response.queued} customers.`))
+                  .catch((error) => notify('Broadcast not queued', errorMessage(error)));
+              }}
               onDuplicate={(campaign) => {
                 const duplicate: BroadcastCampaign = {
                   ...campaign,
@@ -1614,11 +1668,13 @@ function BroadcastsPage({
   campaigns,
   onCreate,
   onExport,
+  onQueue,
   onDuplicate,
 }: {
   campaigns: BroadcastCampaign[];
   onCreate: () => void;
   onExport: () => void;
+  onQueue: (campaign: BroadcastCampaign) => void;
   onDuplicate: (campaign: BroadcastCampaign) => void;
 }) {
   const totalSent = campaigns.filter((campaign) => campaign.status === 'Sent').reduce((sum) => sum + 400000, 0) + 400000;
@@ -1678,6 +1734,9 @@ function BroadcastsPage({
                     <td className="px-4 py-3">{formatRM(campaign.revenue)}</td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
+                        <button className="rounded border border-outline-variant/30 px-3 py-1.5 text-xs hover:bg-surface-low" onClick={() => onQueue(campaign)} type="button">
+                          Queue
+                        </button>
                         <button className="rounded border border-outline-variant/30 px-3 py-1.5 text-xs hover:bg-surface-low" onClick={() => onDuplicate(campaign)} type="button">
                           Duplicate
                         </button>

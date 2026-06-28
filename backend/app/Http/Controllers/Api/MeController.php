@@ -19,10 +19,7 @@ class MeController extends Controller
                 'email' => $user->email,
                 'is_platform_owner' => $user->isPlatformOwner(),
             ],
-            'tenants' => $user->tenants()
-                ->select('tenants.id', 'tenants.name', 'tenants.slug', 'tenants.plan', 'tenants.access_status')
-                ->orderBy('tenants.name')
-                ->get(),
+            'tenants' => $user->sessionTenants(),
         ]);
     }
 }

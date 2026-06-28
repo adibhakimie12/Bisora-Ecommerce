@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\CustomerProfile;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Store;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -66,6 +67,70 @@ class AnalyticsApiTest extends TestCase
             ->assertJsonPath('data.metrics.customers', 1)
             ->assertJsonPath('data.metrics.products', 1)
             ->assertJsonPath('data.recent_orders.0.number', 'ORD-9019');
+    }
+
+    public function test_dashboard_includes_trial_onboarding_progress(): void
+    {
+        [$user, $tenant] = $this->createTenantUser();
+        Store::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Demo Store',
+            'slug' => 'demo-store',
+            'managed_domain' => 'demo-store.bisora.app',
+            'settings' => [
+                'payments' => [
+                    'gateways' => [['slug' => 'stripe', 'enabled_at_checkout' => true]],
+                ],
+                'shipping' => [
+                    'providers' => [['slug' => 'easyparcel', 'enabled' => false]],
+                ],
+                'branding' => [
+                    'domain' => 'demo-store.bisora.app',
+                ],
+                'storefront' => [
+                    'status' => 'live',
+                ],
+            ],
+        ]);
+        Product::create([
+            'tenant_id' => $tenant->id,
+            'title' => 'First Product',
+            'slug' => 'first-product',
+            'sku' => 'FIRST-001',
+            'price' => 9900,
+            'stock' => 5,
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->withHeader('X-Tenant-Id', (string) $tenant->id)
+            ->getJson('/api/dashboard')
+            ->assertOk()
+            ->assertJsonPath('data.onboarding.progress.completed', 3)
+            ->assertJsonPath('data.onboarding.progress.total', 4)
+            ->assertJsonPath('data.onboarding.items.0.key', 'add_first_product')
+            ->assertJsonPath('data.onboarding.items.0.completed', true)
+            ->assertJsonPath('data.onboarding.items.2.key', 'configure_shipping')
+            ->assertJsonPath('data.onboarding.items.2.completed', false);
+    }
+
+    public function test_dashboard_requires_live_storefront_for_publish_step(): void
+    {
+        [$user, $tenant] = $this->createTenantUser();
+        Store::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Demo Store',
+            'slug' => 'demo-store',
+            'managed_domain' => 'demo-store.bisora.app',
+            'settings' => ['storefront' => ['status' => 'draft']],
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->withHeader('X-Tenant-Id', (string) $tenant->id)
+            ->getJson('/api/dashboard')
+            ->assertOk()
+            ->assertJsonPath('data.onboarding.items.3.key', 'publish_storefront')
+            ->assertJsonPath('data.onboarding.items.3.completed', false);
     }
 
     public function test_tenant_user_can_view_reports_overview_and_finance_summary(): void

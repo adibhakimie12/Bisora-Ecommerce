@@ -5,11 +5,16 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreProductRequest;
 use App\Models\Product;
+use App\Services\PlanLimitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
+    public function __construct(private readonly PlanLimitService $planLimitService)
+    {
+    }
+
     public function index(Request $request): JsonResponse
     {
         $tenant = $request->attributes->get('tenant');
@@ -26,6 +31,16 @@ class ProductController extends Controller
     public function store(StoreProductRequest $request): JsonResponse
     {
         $tenant = $request->attributes->get('tenant');
+        $usedProducts = Product::query()->where('tenant_id', $tenant->id)->count();
+        $productLimit = $this->planLimitService->limit($tenant, 'products');
+
+        if (! $request->user()?->isPlatformOwner() && $usedProducts >= $productLimit) {
+            return response()->json([
+                'message' => "{$tenant->plan} product limit reached. Upgrade package to add more products.",
+                'limit' => $this->planLimitService->limitPayload($tenant, 'products', $usedProducts),
+            ], 422);
+        }
+
         $product = Product::create([
             ...$request->validated(),
             'tenant_id' => $tenant->id,

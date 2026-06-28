@@ -13,6 +13,7 @@ import {
 import {
   applyPackageDiscount,
   canTerminateTenant,
+  defaultSubscriptionPackages,
   grantFreeAccess,
   getGatewayConnectionState,
   getTenantAccessState,
@@ -46,8 +47,8 @@ export function SuperadminModule({ section }: { section?: string }) {
       brandName: 'Bisora Demo Store',
       ownerName: 'Sarah Admin',
       ownerEmail: 'sarah@bisora.my',
-      packageName: 'Growth',
-      monthlyFee: 299,
+      packageName: 'Premium',
+      monthlyFee: 199,
       billingStatus: 'Paid',
       accessStatus: 'Active',
       daysOverdue: 0,
@@ -57,8 +58,8 @@ export function SuperadminModule({ section }: { section?: string }) {
       brandName: 'Nur Atelier',
       ownerName: 'Aina Rahman',
       ownerEmail: 'aina@nuratelier.my',
-      packageName: 'Starter',
-      monthlyFee: 99,
+      packageName: 'Basic',
+      monthlyFee: 59,
       billingStatus: 'Overdue',
       accessStatus: 'Active',
       daysOverdue: 8,
@@ -68,8 +69,8 @@ export function SuperadminModule({ section }: { section?: string }) {
       brandName: 'Legacy Shop',
       ownerName: 'Hakim Owner',
       ownerEmail: 'hakim@legacyshop.my',
-      packageName: 'Pro',
-      monthlyFee: 499,
+      packageName: 'Standard',
+      monthlyFee: 99,
       billingStatus: 'Failed',
       accessStatus: 'Suspended',
       daysOverdue: 19,
@@ -195,7 +196,7 @@ function TenantAccessPanel({
 }) {
   const [freeAccessEmail, setFreeAccessEmail] = useState('');
   const [selectedTenantId, setSelectedTenantId] = useState(tenants[0]?.id ?? '');
-  const [selectedPackageName, setSelectedPackageName] = useState('Growth');
+  const [selectedPackageName, setSelectedPackageName] = useState('Free Trial');
 
   return (
     <section className="rounded-3xl border border-outline-variant/20 bg-white p-6 shadow-sm">
@@ -235,9 +236,11 @@ function TenantAccessPanel({
             onChange={(event) => setSelectedPackageName(event.target.value)}
             className="rounded-2xl border border-outline-variant/20 bg-white px-4 py-3 text-sm outline-none focus:border-primary"
           >
-            <option value="Starter">Starter</option>
-            <option value="Growth">Growth</option>
-            <option value="Pro">Pro</option>
+            {defaultSubscriptionPackages.map((item) => (
+              <option key={item.id} value={item.name}>
+                {item.name}
+              </option>
+            ))}
           </select>
           <button
             type="button"
@@ -289,11 +292,7 @@ function TenantAccessPanel({
 }
 
 function PackagesPanel() {
-  const [packages, setPackages] = useState<SubscriptionPackage[]>([
-    { id: 'starter', name: 'Starter', monthlyFee: 99, discountPercent: 0, features: ['Basic store', 'Standard support', 'Starter builder access'] },
-    { id: 'growth', name: 'Growth', monthlyFee: 299, discountPercent: 0, features: ['Automation', 'Campaigns', 'Advanced builder'] },
-    { id: 'pro', name: 'Pro', monthlyFee: 499, discountPercent: 0, features: ['Team access', 'Custom gateway support', 'Higher sales volume'] },
-  ]);
+  const [packages, setPackages] = useState<SubscriptionPackage[]>(defaultSubscriptionPackages);
 
   useEffect(() => {
     if (!hasApiToken()) return;

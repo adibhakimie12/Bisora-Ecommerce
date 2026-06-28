@@ -52,3 +52,9 @@
 - QA
 - Environment setup
 - Live deployment
+- `/api/health` monitoring
+- Free trial signup smoke test
+- Queue/Horizon worker supervision
+- Notification delivery command supervision
+- Supabase Storage upload smoke test
+- Superadmin trial tenant access review

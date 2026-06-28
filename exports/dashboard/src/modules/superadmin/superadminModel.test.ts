@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   applyPackageDiscount,
   canTerminateTenant,
+  defaultSubscriptionPackages,
   grantFreeAccess,
   getGatewayConnectionState,
   getTenantAccessState,
@@ -55,6 +56,9 @@ const growthPackage: SubscriptionPackage = {
 
 assert.equal(applyPackageDiscount(growthPackage, 20).monthlyFee, 239.2);
 assert.equal(applyPackageDiscount(growthPackage, 150).discountPercent, 100);
+assert.deepEqual(defaultSubscriptionPackages.map((item) => item.name), ['Free Trial', 'Basic', 'Standard', 'Premium']);
+assert.equal(defaultSubscriptionPackages[0].monthlyFee, 0);
+assert.ok(defaultSubscriptionPackages[0].features.includes('Basic access'));
 
 assert.equal(
   getGatewayConnectionState({

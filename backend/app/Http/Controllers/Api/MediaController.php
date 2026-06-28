@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MediaAsset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -62,11 +63,7 @@ class MediaController extends Controller
                 'bucket' => $asset->bucket,
                 'object_key' => $asset->object_key,
                 'status' => $asset->status,
-                'upload_url' => route('media.local-upload-placeholder', ['mediaAsset' => $asset->id], false),
-                'headers' => [
-                    'Content-Type' => $asset->mime_type,
-                    'x-bisora-object-key' => $asset->object_key,
-                ],
+                ...$this->uploadIntent($asset),
             ],
         ], 201);
     }
@@ -114,6 +111,38 @@ class MediaController extends Controller
             return null;
         }
 
-        return rtrim((string) config('filesystems.disks.supabase.url'), '/').'/'.$asset->object_key;
+        return rtrim((string) config('filesystems.disks.supabase.url'), '/').'/'.$asset->bucket.'/'.$asset->object_key;
+    }
+
+    private function uploadIntent(MediaAsset $asset): array
+    {
+        if (config('filesystems.default') !== 'supabase') {
+            return [
+                'upload_url' => route('media.local-upload-placeholder', ['mediaAsset' => $asset->id], false),
+                'headers' => [
+                    'Content-Type' => $asset->mime_type,
+                    'x-bisora-object-key' => $asset->object_key,
+                ],
+            ];
+        }
+
+        $diskConfig = [
+            ...config('filesystems.disks.supabase'),
+            'bucket' => $asset->bucket,
+        ];
+        $intent = Storage::build($diskConfig)->temporaryUploadUrl(
+            $asset->object_key,
+            now()->addMinutes(15),
+            ['ContentType' => $asset->mime_type],
+        );
+
+        return [
+            'upload_url' => $intent['url'],
+            'headers' => [
+                ...($intent['headers'] ?? []),
+                'Content-Type' => $asset->mime_type,
+                'x-bisora-object-key' => $asset->object_key,
+            ],
+        ];
     }
 }

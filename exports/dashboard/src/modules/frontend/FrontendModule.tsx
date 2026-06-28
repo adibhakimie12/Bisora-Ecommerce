@@ -2,36 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { BookOpenText, CheckCircle2, LayoutTemplate, ShoppingBag, ShoppingCart, Sparkles, Truck } from 'lucide-react';
 import { categories } from '../products/data';
 import type { Product } from '../products/types';
-import { loadProducts } from '../storefront/productStore';
+import { syncCanonicalUrl, resolveCanonicalPathFromHash } from '../seo/canonical';
+import { getImagePerformanceProps, type ImageSurface } from '../seo/performance';
+import { syncProductSchema } from '../seo/productSchema';
 import { loadBlogPosts, saveBlogPosts } from '../storefront/blogStore';
-import { getStorefrontTheme } from '../websiteBuilder/themeCatalog';
-import {
-  canViewPublishedLandingPage,
-  createDefaultLandingPage,
-  landingPageStorageKey,
-  normalizeLandingPage,
-  type LandingBlock,
-  type LandingPageDraft,
-} from '../websiteBuilder/pageBuilderModel';
-import { CustomerAccountRuntime, type CustomerAccountSection } from './CustomerAccountRuntime';
+import { useStorefrontProducts } from '../storefront/productStore';
+import { useStorefrontPages } from '../storefront/websitePagesStore';
 
 type FrontendSection =
   | 'overview'
-  | 'theme-demo'
   | 'homepage'
   | 'collection'
   | 'product'
   | 'cart'
   | 'checkout'
   | 'thank-you'
-  | 'account-login'
-  | 'account-register'
-  | 'account'
-  | 'account-orders'
-  | 'account-wishlist'
-  | 'account-addresses'
-  | 'landing-page-preview'
-  | 'landing-page'
   | 'blog';
 
 const frontendTabs: Array<{ key: FrontendSection; label: string }> = [
@@ -47,9 +32,9 @@ const frontendTabs: Array<{ key: FrontendSection; label: string }> = [
 
 export function FrontendModule({ section, slug }: { section?: string; slug?: string }) {
   const activeSection = normalizeFrontendSection(section);
-  const demoTheme = getStorefrontTheme(slug);
   const [blogPosts, setBlogPosts] = useState(loadBlogPosts);
-  const [productRecords] = useState(loadProducts);
+  const [productRecords] = useStorefrontProducts();
+  const [pageRecords] = useStorefrontPages();
   const publishedPosts = blogPosts.filter((post) => post.status === 'Published');
 
   useEffect(() => {
@@ -64,10 +49,6 @@ export function FrontendModule({ section, slug }: { section?: string; slug?: str
       overview: {
         title: 'Frontstore Preview | Bisora',
         description: 'Preview buyer-facing runtime surfaces from homepage to checkout.',
-      },
-      'theme-demo': {
-        title: `${demoTheme.name} Demo | Bisora`,
-        description: `Preview the full buyer-facing ${demoTheme.name} storefront template.`,
       },
       homepage: {
         title: 'Homepage Preview | Bisora',
@@ -88,38 +69,6 @@ export function FrontendModule({ section, slug }: { section?: string; slug?: str
       'thank-you': {
         title: 'Thank You Preview | Bisora',
         description: 'Preview post-purchase thank-you flow, order summary, and retention area.',
-      },
-      'account-login': {
-        title: `${demoTheme.name} Customer Login | Bisora`,
-        description: 'Preview the buyer-facing customer login page.',
-      },
-      'account-register': {
-        title: `${demoTheme.name} Customer Register | Bisora`,
-        description: 'Preview the buyer-facing customer registration page.',
-      },
-      account: {
-        title: `${demoTheme.name} Customer Account | Bisora`,
-        description: 'Preview the buyer-facing customer account dashboard.',
-      },
-      'account-orders': {
-        title: `${demoTheme.name} Customer Orders | Bisora`,
-        description: 'Preview buyer order tracking and purchase history.',
-      },
-      'account-wishlist': {
-        title: `${demoTheme.name} Customer Wishlist | Bisora`,
-        description: 'Preview buyer wishlist in the storefront account.',
-      },
-      'account-addresses': {
-        title: `${demoTheme.name} Customer Addresses | Bisora`,
-        description: 'Preview buyer saved addresses in the storefront account.',
-      },
-      'landing-page-preview': {
-        title: 'Landing Page Draft Preview | Bisora',
-        description: 'Preview the current landing page draft before publishing.',
-      },
-      'landing-page': {
-        title: 'Landing Page | Bisora',
-        description: 'Published buyer-facing landing page.',
       },
       blog: {
         title: 'Blog Preview | Bisora',
@@ -143,37 +92,19 @@ export function FrontendModule({ section, slug }: { section?: string; slug?: str
       document.head.appendChild(meta);
     }
     meta.setAttribute('content', nextDescription);
-  }, [activeSection, productRecords, slug, demoTheme.name]);
+    syncCanonicalUrl(
+      resolveCanonicalPathFromHash(window.location.hash, {
+        products: productRecords,
+        categories,
+        pages: pageRecords,
+      }),
+    );
+    syncProductSchema(activeProduct, { currency: 'MYR' });
+  }, [activeSection, pageRecords, productRecords, slug]);
 
   useEffect(() => {
     saveBlogPosts(blogPosts);
   }, [blogPosts]);
-
-  if (activeSection === 'theme-demo') {
-    const Preview = demoTheme.Preview;
-    return (
-      <div className="space-y-6">
-        <section className="rounded-3xl border border-outline-variant/20 bg-white p-6 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.3em] text-on-surface-variant">Theme Demo</p>
-          <h1 className="mt-2 text-3xl font-semibold text-on-surface">{demoTheme.name}</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-on-surface-variant">
-            This is the buyer-facing demo preview. Website Builder should show the theme card only; full website viewing happens here or in a new tab.
-          </p>
-        </section>
-        <section className="overflow-hidden rounded-3xl border border-outline-variant/20 bg-white shadow-sm">
-          <Preview />
-        </section>
-      </div>
-    );
-  }
-
-  if (activeSection === 'landing-page-preview' || activeSection === 'landing-page') {
-    return <LandingPageRuntime mode={activeSection === 'landing-page' ? 'live' : 'preview'} slug={slug} />;
-  }
-
-  if (isCustomerAccountSection(activeSection)) {
-    return <CustomerAccountRuntime theme={demoTheme} section={activeSection} />;
-  }
 
   return (
     <div className="space-y-6">
@@ -259,11 +190,11 @@ export function FrontendModule({ section, slug }: { section?: string; slug?: str
                 >
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="flex min-w-0 flex-1 gap-4">
-                      <img
+                      <OptimizedImage
                         alt={post.title}
                         className="h-24 w-24 rounded-2xl object-cover"
-                        referrerPolicy="no-referrer"
                         src={post.coverImagePreview ?? categories[0]?.coverUrl}
+                        surface="thumbnail"
                       />
                       <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-3">
@@ -314,7 +245,7 @@ export function FrontendModule({ section, slug }: { section?: string; slug?: str
                 <div className="mt-4 space-y-4">
                   {publishedPosts.map((post) => (
                     <article key={post.id} className="overflow-hidden rounded-[24px] border border-outline-variant/20 bg-surface-low">
-                      <img alt={post.title} className="h-44 w-full object-cover" referrerPolicy="no-referrer" src={post.coverImagePreview ?? categories[0]?.coverUrl} />
+                      <OptimizedImage alt={post.title} className="h-44 w-full object-cover" src={post.coverImagePreview ?? categories[0]?.coverUrl} surface="card" />
                       <div className="p-4">
                         <p className="text-xs uppercase tracking-[0.25em] text-on-surface-variant">{post.keyword}</p>
                         <h4 className="mt-2 text-lg font-semibold text-on-surface">{post.title}</h4>
@@ -374,35 +305,58 @@ function RuntimeShell({
 }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
-      <section className="rounded-3xl border border-outline-variant/20 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-3">
+      <article className="rounded-3xl border border-outline-variant/20 bg-white p-6 shadow-sm">
+        <header className="flex items-center gap-3">
           {icon}
           <div>
             <p className="text-sm font-medium text-on-surface-variant">Frontend Surface</p>
             <h2 className="mt-2 text-2xl font-semibold text-on-surface">{title}</h2>
           </div>
-        </div>
+        </header>
         <div className="mt-6 rounded-[28px] border border-outline-variant/20 bg-surface-low p-6">
           <div className="rounded-[24px] bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
+            <header className="mb-4 flex items-center justify-between">
               <span className="text-xs uppercase tracking-[0.25em] text-on-surface-variant">{title}</span>
               <span className="rounded-full bg-surface-low px-3 py-1 text-xs text-on-surface-variant">Frontstore preview shell</span>
-            </div>
+            </header>
             <p className="mb-4 text-sm leading-6 text-on-surface-variant">{note}</p>
             {children}
           </div>
         </div>
-      </section>
+      </article>
 
-      <section className="rounded-3xl border border-outline-variant/20 bg-white p-6 shadow-sm">
+      <aside className="rounded-3xl border border-outline-variant/20 bg-white p-6 shadow-sm">
         <p className="text-sm font-medium text-on-surface-variant">Why this page matters</p>
         <div className="mt-5 space-y-4 text-sm text-on-surface-variant">
           {bullets.map((point, index) => (
             <FlowStep key={point} title={`Priority ${index + 1}`} text={point} />
           ))}
         </div>
-      </section>
+      </aside>
     </div>
+  );
+}
+
+function OptimizedImage({
+  surface,
+  alt,
+  className,
+  referrerPolicy = 'no-referrer',
+  ...props
+}: React.ImgHTMLAttributes<HTMLImageElement> & { surface: ImageSurface }) {
+  const imageProps = getImagePerformanceProps(surface);
+
+  return (
+    <img
+      alt={alt}
+      className={className}
+      decoding={imageProps.decoding}
+      fetchPriority={imageProps.fetchPriority}
+      loading={imageProps.loading}
+      referrerPolicy={referrerPolicy}
+      sizes={imageProps.sizes}
+      {...props}
+    />
   );
 }
 
@@ -434,30 +388,30 @@ function HomepageRuntime({ productRecords }: { productRecords: Product[] }) {
                 <button className="rounded-full bg-[#8a7b6c] px-5 py-2.5 text-sm text-white">Shop The Edit</button>
               </div>
             </div>
-            <img alt="Homepage hero" className="h-full min-h-[260px] w-full object-cover" referrerPolicy="no-referrer" src={publishedCategories[0]?.coverUrl ?? activeProducts[0]?.thumbnailUrl} />
+            <OptimizedImage alt="Homepage hero" className="h-full min-h-[260px] w-full object-cover" src={publishedCategories[0]?.coverUrl ?? activeProducts[0]?.thumbnailUrl} surface="hero" />
           </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
           {publishedCategories.map((category) => (
-            <div key={category.id} className="overflow-hidden rounded-[24px] border border-outline-variant/20 bg-white">
-              <img alt={category.name} className="h-36 w-full object-cover" referrerPolicy="no-referrer" src={category.coverUrl} />
+            <article key={category.id} className="overflow-hidden rounded-[24px] border border-outline-variant/20 bg-white">
+              <OptimizedImage alt={category.name} className="h-36 w-full object-cover" src={category.coverUrl} surface="card" />
               <div className="p-4">
-                <p className="font-medium text-on-surface">{category.name}</p>
+                <h3 className="font-medium text-on-surface">{category.name}</h3>
                 <p className="mt-2 text-sm leading-6 text-on-surface-variant">{category.description}</p>
               </div>
-            </div>
+            </article>
           ))}
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
           {activeProducts.map((product) => (
-            <div key={product.id} className="rounded-[24px] border border-outline-variant/20 bg-white p-4">
-              <img alt={product.title} className="aspect-square w-full rounded-[20px] object-cover" referrerPolicy="no-referrer" src={product.thumbnailUrl} />
-              <p className="mt-3 font-medium text-on-surface">{product.title}</p>
+            <article key={product.id} className="rounded-[24px] border border-outline-variant/20 bg-white p-4">
+              <OptimizedImage alt={product.title} className="aspect-square w-full rounded-[20px] object-cover" src={product.thumbnailUrl} surface="card" />
+              <h3 className="mt-3 font-medium text-on-surface">{product.title}</h3>
               <p className="mt-1 text-xs text-on-surface-variant">{product.categoryName}</p>
               <p className="mt-2 text-sm font-semibold text-on-surface">MYR {product.price.toFixed(2)}</p>
-            </div>
+            </article>
           ))}
         </div>
       </div>
@@ -499,11 +453,11 @@ function CollectionRuntime({ productRecords }: { productRecords: Product[] }) {
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {activeProducts.map((product) => (
-              <div key={product.id} className="rounded-[24px] border border-outline-variant/20 bg-white p-4">
-                <img alt={product.title} className="aspect-square w-full rounded-[20px] object-cover" referrerPolicy="no-referrer" src={product.thumbnailUrl} />
-                <p className="mt-3 font-medium text-on-surface">{product.title}</p>
+              <article key={product.id} className="rounded-[24px] border border-outline-variant/20 bg-white p-4">
+                <OptimizedImage alt={product.title} className="aspect-square w-full rounded-[20px] object-cover" src={product.thumbnailUrl} surface="card" />
+                <h3 className="mt-3 font-medium text-on-surface">{product.title}</h3>
                 <p className="mt-2 text-sm font-semibold text-on-surface">MYR {product.price.toFixed(2)}</p>
-              </div>
+              </article>
             ))}
           </div>
         </div>
@@ -542,33 +496,33 @@ function ProductRuntime({
     >
       <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <div className="grid gap-3 sm:grid-cols-[88px_1fr]">
-          <div className="space-y-3">
+          <div className="space-y-3" aria-label="Product gallery thumbnails">
             {Array.from({ length: 3 }).map((_, index) => (
-              <img key={index} alt="" className="h-20 w-20 rounded-2xl object-cover" referrerPolicy="no-referrer" src={product.thumbnailUrl} />
+              <OptimizedImage key={index} alt="" aria-hidden="true" className="h-20 w-20 rounded-2xl object-cover" src={product.thumbnailUrl} surface="thumbnail" />
             ))}
           </div>
-          <img alt={product.title} className="w-full rounded-[28px] object-cover" referrerPolicy="no-referrer" src={product.thumbnailUrl} />
+          <OptimizedImage alt={product.title} className="w-full rounded-[28px] object-cover" src={product.thumbnailUrl} surface="feature" />
         </div>
-        <div className="space-y-5">
-          <div>
+        <article className="space-y-5">
+          <header>
             <p className="text-xs uppercase tracking-[0.25em] text-on-surface-variant">{product.categoryName}</p>
             <h3 className="mt-2 text-3xl font-semibold text-on-surface">{product.title}</h3>
             <p className="mt-2 text-sm font-semibold text-on-surface">MYR {product.price.toFixed(2)}</p>
             <p className="mt-2 text-xs text-on-surface-variant">/products/{product.slug}</p>
-          </div>
+          </header>
           <p className="text-sm leading-6 text-on-surface-variant">{product.description}</p>
           <div className="grid gap-3 sm:grid-cols-3">
             {product.variants.map((variant) => (
-              <div key={variant.id} className="rounded-2xl border border-outline-variant/20 bg-surface-low px-3 py-3 text-sm text-on-surface">
+              <article key={variant.id} className="rounded-2xl border border-outline-variant/20 bg-surface-low px-3 py-3 text-sm text-on-surface">
                 {variant.name}
-              </div>
+              </article>
             ))}
           </div>
           <div className="flex gap-3">
             <button className="rounded-full bg-primary px-5 py-3 text-sm text-on-primary">Add to Cart</button>
             <button className="rounded-full border border-outline-variant/20 px-5 py-3 text-sm text-on-surface">Buy Now</button>
           </div>
-        </div>
+        </article>
       </div>
     </RuntimeShell>
   );
@@ -593,7 +547,7 @@ function CartRuntime({ productRecords }: { productRecords: Product[] }) {
         <div className="space-y-4">
           {cartItems.map((item) => (
             <div key={item.id} className="flex items-center gap-4 rounded-[24px] border border-outline-variant/20 bg-white p-4">
-              <img alt={item.title} className="h-24 w-24 rounded-2xl object-cover" referrerPolicy="no-referrer" src={item.thumbnailUrl} />
+              <OptimizedImage alt={item.title} className="h-24 w-24 rounded-2xl object-cover" src={item.thumbnailUrl} surface="thumbnail" />
               <div className="flex-1">
                 <p className="font-medium text-on-surface">{item.title}</p>
                 <p className="mt-1 text-sm text-on-surface-variant">{item.categoryName}</p>
@@ -662,7 +616,7 @@ function CheckoutRuntime({ productRecords }: { productRecords: Product[] }) {
           <div className="mt-4 space-y-3">
             {cartItems.map((item) => (
               <div key={item.id} className="flex items-center gap-3">
-                <img alt={item.title} className="h-12 w-12 rounded-xl object-cover" referrerPolicy="no-referrer" src={item.thumbnailUrl} />
+                <OptimizedImage alt={item.title} className="h-12 w-12 rounded-xl object-cover" src={item.thumbnailUrl} surface="thumbnail" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-on-surface">{item.title}</p>
                   <p className="text-xs text-on-surface-variant">MYR {item.price.toFixed(2)}</p>
@@ -717,7 +671,7 @@ function ThankYouRuntime({ productRecords }: { productRecords: Product[] }) {
           <div className="rounded-[24px] border border-outline-variant/20 bg-surface-low p-5">
             <p className="font-medium text-on-surface">Order Summary</p>
             <div className="mt-4 flex items-center gap-3">
-              <img alt={product.title} className="h-14 w-14 rounded-xl object-cover" referrerPolicy="no-referrer" src={product.thumbnailUrl} />
+              <OptimizedImage alt={product.title} className="h-14 w-14 rounded-xl object-cover" src={product.thumbnailUrl} surface="thumbnail" />
               <div>
                 <p className="text-sm font-medium text-on-surface">{product.title}</p>
                 <p className="text-xs text-on-surface-variant">MYR {product.price.toFixed(2)}</p>
@@ -768,261 +722,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function LandingPageRuntime({ mode, slug }: { mode: 'preview' | 'live'; slug?: string }) {
-  const [submitted, setSubmitted] = useState(false);
-  const page = loadLandingPageRuntime();
-  const isWrongSlug = Boolean(slug && page.slug !== decodeURIComponent(slug));
-  const canRenderLive = mode === 'preview' || canViewPublishedLandingPage(page);
-
-  useEffect(() => {
-    document.title = `${page.title || 'Landing Page'} | Bisora`;
-  }, [page.title]);
-
-  if (!canRenderLive) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-surface px-6 py-16">
-        <section className="max-w-lg rounded-3xl border border-amber-100 bg-white p-8 text-center shadow-sm">
-          <p className="text-sm font-medium text-amber-700">Landing page belum live</p>
-          <h1 className="mt-3 text-3xl font-semibold text-on-surface">Publish dulu untuk buka live page</h1>
-          <p className="mt-3 text-sm leading-6 text-on-surface-variant">
-            Preview boleh dibuka bila-bila masa, tapi live URL hanya muncul selepas validation lulus dan status page menjadi Published.
-          </p>
-          <a href="#/website-builder/pages" className="mt-6 inline-flex rounded-full bg-primary px-5 py-3 text-sm text-on-primary">
-            Back to Builder
-          </a>
-        </section>
-      </main>
-    );
-  }
-
-  return (
-    <main className="min-h-screen bg-white">
-      {mode === 'preview' && (
-        <div className="sticky top-0 z-20 bg-amber-300 px-5 py-2 text-center text-sm font-medium text-amber-950">
-          Draft preview. Publish to make the live URL available.
-        </div>
-      )}
-      {isWrongSlug && (
-        <div className="bg-surface-low px-5 py-2 text-center text-xs text-on-surface-variant">
-          Showing the current saved landing page draft.
-        </div>
-      )}
-      <div className="mx-auto w-full max-w-6xl">
-        {page.blocks.map((block) => (
-          <LandingRuntimeBlock key={block.id} block={block} onLeadSubmit={() => setSubmitted(true)} />
-        ))}
-      </div>
-      {submitted && (
-        <div className="fixed bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full bg-emerald-600 px-5 py-3 text-sm font-medium text-white shadow-lg">
-          Lead submitted. This is ready to connect to backend forms.
-        </div>
-      )}
-    </main>
-  );
-}
-
-function LandingRuntimeBlock({ block, onLeadSubmit }: { block: LandingBlock; onLeadSubmit: () => void }) {
-  if (block.hideDesktop) {
-    return null;
-  }
-
-  const style: React.CSSProperties = {
-    width: `${block.widthPercent}%`,
-    marginLeft: block.align === 'right' || block.align === 'center' ? 'auto' : undefined,
-    marginRight: block.align === 'left' || block.align === 'center' ? 'auto' : undefined,
-    paddingTop: block.paddingY,
-    paddingBottom: block.paddingY,
-    backgroundColor: block.backgroundColor || undefined,
-    color: block.textColor || undefined,
-  };
-  const alignClass = block.align === 'center' ? 'text-center' : block.align === 'right' ? 'text-right' : 'text-left';
-  const toneClass = block.tone === 'dark' ? 'bg-[#171717] text-white' : block.tone === 'brand' ? 'bg-primary text-on-primary' : block.tone === 'soft' ? 'bg-surface-low text-on-surface' : 'bg-white text-on-surface';
-
-  if (block.type === 'divider') {
-    return <section className="px-6" style={style}><div className="h-px w-full bg-on-surface/20" /></section>;
-  }
-
-  if (block.type === 'image') {
-    return (
-      <section className={`px-6 ${alignClass}`} style={style}>
-        {block.imageSrc ? (
-          <img src={block.imageSrc} alt={block.title} className="max-h-[620px] w-full rounded-2xl object-cover" />
-        ) : (
-          <div className="grid min-h-72 place-items-center rounded-2xl bg-surface-low text-on-surface-variant">
-            <span>{block.imageName || 'Image placeholder'}</span>
-          </div>
-        )}
-      </section>
-    );
-  }
-
-  if (block.type === 'video') {
-    return (
-      <section className="px-6" style={style}>
-        <a href={block.videoUrl || '#'} target="_blank" rel="noreferrer" className="grid aspect-video place-items-center rounded-2xl bg-black text-center text-white">
-          <span className="rounded-full bg-white/15 px-5 py-3">Play video</span>
-        </a>
-      </section>
-    );
-  }
-
-  if (block.type === 'columns') {
-    return (
-      <section className="grid gap-4 px-6" style={{ ...style, gridTemplateColumns: `repeat(${block.columns}, minmax(0, 1fr))` }}>
-        {block.columnItems.slice(0, block.columns).map((item, index) => <LandingRuntimeColumnItem key={index} item={item} />)}
-      </section>
-    );
-  }
-
-  if (block.type === 'html') {
-    return <section className="px-6" style={style} dangerouslySetInnerHTML={{ __html: block.html }} />;
-  }
-
-  if (block.type === 'timer') {
-    return (
-      <section className="px-6" style={style}>
-        <div className="bg-black p-6 text-center font-mono text-4xl text-white">07 : 15 : 59 : 56<div className="mt-2 grid grid-cols-4 text-xs font-sans"><span>Days</span><span>Hours</span><span>Minutes</span><span>Seconds</span></div></div>
-      </section>
-    );
-  }
-
-  if (block.type === 'button') {
-    return (
-      <section className={`px-6 ${alignClass}`} style={style}>
-        <button onClick={() => handleLandingAction(block)} className="rounded-full bg-primary px-8 py-4 text-sm font-semibold text-on-primary shadow-sm" type="button">
-          {block.buttonText}
-        </button>
-      </section>
-    );
-  }
-
-  if (block.type === 'form') {
-    return (
-      <section className={`px-6 ${alignClass} ${toneClass}`} style={style}>
-        <h2 className="text-3xl font-semibold">{block.title}</h2>
-        <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 opacity-80">{block.body}</p>
-        <form
-          className="mx-auto mt-6 grid max-w-xl gap-3 text-left"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onLeadSubmit();
-          }}
-        >
-          {block.formFields.map((field) => (
-            <input key={field} required className="rounded-xl border border-outline-variant/20 px-4 py-3 text-sm text-on-surface outline-none focus:border-primary" placeholder={field} />
-          ))}
-          <button className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary" type="submit">Submit</button>
-        </form>
-      </section>
-    );
-  }
-
-  if (block.type === 'menu') {
-    return (
-      <nav className={`flex flex-wrap justify-center gap-3 px-6 ${toneClass}`} style={style}>
-        {block.body.split('|').map((item) => <a key={item.trim()} href={`#${item.trim().toLowerCase().replace(/\s+/g, '-')}`} className="rounded-full border border-current/20 px-4 py-2 text-sm">{item.trim()}</a>)}
-      </nav>
-    );
-  }
-
-  return (
-    <section className={`px-6 ${alignClass} ${toneClass}`} style={style}>
-      <h1 className={`${block.type === 'heading' ? 'text-5xl' : 'text-3xl'} font-semibold`}>{block.title}</h1>
-      <p className="mx-auto mt-4 max-w-3xl whitespace-pre-line text-base leading-7 opacity-80">{block.body}</p>
-    </section>
-  );
-}
-
-function LandingRuntimeColumnItem({ item }: { item: LandingBlock['columnItems'][number] }) {
-  if (item.kind === 'image') {
-    return (
-      <div className="rounded-2xl border border-outline-variant/20 p-4 text-sm text-on-surface-variant">
-        {item.imageSrc ? <img src={item.imageSrc} alt={item.title} className="h-52 w-full rounded-xl object-cover" /> : <div className="grid h-52 place-items-center rounded-xl bg-surface-low">{item.imageName || 'Image'}</div>}
-        <h3 className="mt-4 text-lg font-semibold text-on-surface">{item.title}</h3>
-        <p className="mt-2 leading-6">{item.body}</p>
-      </div>
-    );
-  }
-
-  if (item.kind === 'button') {
-    return (
-      <div className="grid min-h-44 place-items-center rounded-2xl border border-outline-variant/20 p-5 text-center">
-        <button onClick={() => window.open(item.buttonTarget || '#', '_blank', 'noopener,noreferrer')} className="rounded-full bg-primary px-6 py-3 text-sm font-semibold text-on-primary" type="button">
-          {item.buttonText}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-2xl border border-outline-variant/20 p-5 text-sm text-on-surface-variant">
-      <h3 className="text-lg font-semibold text-on-surface">{item.title}</h3>
-      <p className="mt-2 leading-6">{item.body}</p>
-    </div>
-  );
-}
-
-function handleLandingAction(block: LandingBlock) {
-  const target = block.buttonTarget || block.buttonLink || '#';
-  if (block.buttonAction === 'whatsapp') {
-    window.open(`https://wa.me/${target.replace(/\D/g, '')}`, '_blank', 'noopener,noreferrer');
-    return;
-  }
-  if (block.buttonAction === 'telegram' || block.buttonAction === 'url') {
-    window.open(target, '_blank', 'noopener,noreferrer');
-    return;
-  }
-  if (block.buttonAction === 'checkout') {
-    window.location.hash = `/frontend/checkout/${target}`;
-    return;
-  }
-  document.querySelector('form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-
-function loadLandingPageRuntime(): LandingPageDraft {
-  try {
-    const savedPage = localStorage.getItem(landingPageStorageKey);
-    return normalizeLandingPage(savedPage ? { ...createDefaultLandingPage(), ...JSON.parse(savedPage) } : createDefaultLandingPage());
-  } catch {
-    return createDefaultLandingPage();
-  }
-}
-
 function normalizeFrontendSection(section?: string): FrontendSection {
   if (
     section === 'overview' ||
-    section === 'theme-demo' ||
     section === 'homepage' ||
     section === 'collection' ||
     section === 'product' ||
     section === 'cart' ||
     section === 'checkout' ||
     section === 'thank-you' ||
-    section === 'account-login' ||
-    section === 'account-register' ||
-    section === 'account' ||
-    section === 'account-orders' ||
-    section === 'account-wishlist' ||
-    section === 'account-addresses' ||
-    section === 'landing-page-preview' ||
-    section === 'landing-page' ||
     section === 'blog'
   ) {
     return section;
   }
 
   return 'overview';
-}
-
-function isCustomerAccountSection(section: FrontendSection): section is CustomerAccountSection {
-  return (
-    section === 'account-login' ||
-    section === 'account-register' ||
-    section === 'account' ||
-    section === 'account-orders' ||
-    section === 'account-wishlist' ||
-    section === 'account-addresses'
-  );
 }
 
 function buildProductSeoTitle(product: Product) {

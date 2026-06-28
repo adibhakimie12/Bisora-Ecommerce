@@ -13,7 +13,7 @@ class SuperadminApiTest extends TestCase
 
     public function test_platform_owner_can_view_overview_and_tenants(): void
     {
-        $owner = User::factory()->create(['email' => 'owner@bisora.my']);
+        $owner = User::factory()->create(['email' => 'adib.hakimi19@gmail.com']);
         Tenant::create([
             'name' => 'Sarah Beauty',
             'slug' => 'sarah-beauty',
@@ -51,7 +51,7 @@ class SuperadminApiTest extends TestCase
 
     public function test_platform_owner_can_update_tenant_access_and_grant_free_access(): void
     {
-        $owner = User::factory()->create(['email' => 'owner@bisora.my']);
+        $owner = User::factory()->create(['email' => 'adib.hakimi19@gmail.com']);
         $tenant = Tenant::create([
             'name' => 'Bisora Demo',
             'slug' => 'bisora-demo',
@@ -83,7 +83,7 @@ class SuperadminApiTest extends TestCase
 
     public function test_platform_owner_can_manage_subscription_packages(): void
     {
-        $owner = User::factory()->create(['email' => 'owner@bisora.my']);
+        $owner = User::factory()->create(['email' => 'adib.hakimi19@gmail.com']);
 
         $this->actingAs($owner, 'sanctum')
             ->postJson('/api/superadmin/packages', [
@@ -104,7 +104,7 @@ class SuperadminApiTest extends TestCase
 
     public function test_platform_owner_can_update_gateway_without_exposing_secrets(): void
     {
-        $owner = User::factory()->create(['email' => 'owner@bisora.my']);
+        $owner = User::factory()->create(['email' => 'adib.hakimi19@gmail.com']);
 
         $this->actingAs($owner, 'sanctum')
             ->patchJson('/api/superadmin/gateways/billplz', [

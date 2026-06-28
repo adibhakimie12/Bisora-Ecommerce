@@ -1,4 +1,4 @@
-export type CustomerTag = 'VIP' | 'Returning' | 'New';
+export type CustomerTag = 'VIP' | 'Returning' | 'New' | 'Inactive';
 export type ReviewStatus = 'Pending' | 'Approved' | 'Hidden' | 'Featured';
 
 export interface CustomerOrderHistory {

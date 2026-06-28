@@ -37,6 +37,7 @@ export interface ShipmentSummary {
 
 export interface Order {
   id: string;
+  backendId?: string;
   customer: Customer;
   products: string;
   date: string;

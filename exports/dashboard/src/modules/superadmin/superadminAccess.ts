@@ -1,6 +1,6 @@
 import { getStoredSession } from '../../api/authSession';
 
-const DEFAULT_OWNER_EMAIL = 'owner@bisora.my';
+const DEFAULT_OWNER_EMAIL = 'adib.hakimi19@gmail.com';
 
 function getRuntimeEnv(): Record<string, string | undefined> {
   return ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});

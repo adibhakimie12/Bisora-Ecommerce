@@ -19,7 +19,7 @@ interface ApiCustomer {
   name: string;
   email: string;
   avatar_url?: string | null;
-  status: 'vip' | 'returning' | 'new';
+  status: 'vip' | 'returning' | 'new' | 'inactive';
   orders_count: number;
   total_spent: number;
   last_order_at?: string | null;
@@ -47,7 +47,7 @@ interface ApiOrder {
   payment_method?: string | null;
   customer?: { id: number | string; name: string; email: string; status?: string } | null;
   items?: Array<{ id?: string; name: string; sku: string; quantity: number; price: number; image_url?: string | null }>;
-  shipping_address?: Partial<ShippingAddress> | null;
+  shipping_address?: (Partial<ShippingAddress> & { address_line_1?: string; address_line_2?: string }) | null;
   shipment?: { courier?: string; status?: ApiFulfillmentStatus; tracking_location?: string; tracking_number?: string } | null;
 }
 
@@ -64,6 +64,33 @@ interface ApiReview {
   status: ApiReviewStatus;
   reviewed_at?: string | null;
   verified_purchase: boolean;
+}
+
+interface ApiDraftOrder {
+  id: number | string;
+  number: string;
+  customer_name: string;
+  customer_email: string;
+  source?: string | null;
+  items?: Array<{ name: string; sku?: string | null; quantity: number; price: number; line_total?: number }>;
+  total: number;
+  status: 'draft' | 'invoice_sent' | 'converted';
+  note?: string | null;
+  updated_at?: string | null;
+}
+
+export interface DraftOrderRecord {
+  backendId: string;
+  id: string;
+  customer: string;
+  customerEmail: string;
+  source: string;
+  items: number;
+  total: number;
+  status: 'Draft' | 'Invoice Sent' | 'Converted';
+  updatedAt: string;
+  note: string;
+  previewImages: string[];
 }
 
 function toMajorUnits(value: number) {
@@ -97,6 +124,7 @@ export function mapOrderFromApi(order: ApiOrder): Order {
 
   return {
     id: `#${order.number}`,
+    backendId: String(order.id),
     customer: {
       name: order.customer?.name ?? 'Guest customer',
       email: order.customer?.email ?? '',
@@ -118,8 +146,8 @@ export function mapOrderFromApi(order: ApiOrder): Order {
     },
     shippingAddress: {
       recipient: order.shipping_address?.recipient ?? order.customer?.name ?? '',
-      line1: order.shipping_address?.line1 ?? '',
-      line2: order.shipping_address?.line2 ?? '',
+      line1: order.shipping_address?.line1 ?? order.shipping_address?.address_line_1 ?? '',
+      line2: order.shipping_address?.line2 ?? order.shipping_address?.address_line_2 ?? '',
       city: order.shipping_address?.city ?? '',
       country: order.shipping_address?.country ?? '',
     },
@@ -141,7 +169,7 @@ export function mapCustomerFromApi(customer: ApiCustomer): CustomerRecord {
     name: customer.name,
     email: customer.email,
     avatarUrl: customer.avatar_url ?? '',
-    status: customer.status === 'vip' ? 'VIP' : customer.status === 'returning' ? 'Returning' : 'New',
+    status: customer.status === 'vip' ? 'VIP' : customer.status === 'returning' ? 'Returning' : customer.status === 'inactive' ? 'Inactive' : 'New',
     ordersCount: customer.orders_count,
     totalSpent: toMajorUnits(customer.total_spent),
     lastOrderDate: formatDate(customer.last_order_at),
@@ -170,11 +198,90 @@ export function mapReviewFromApi(review: ApiReview): ReviewRecord {
   };
 }
 
+export function mapDraftOrderFromApi(draft: ApiDraftOrder): DraftOrderRecord {
+  const status = draft.status === 'invoice_sent' ? 'Invoice Sent' : draft.status === 'converted' ? 'Converted' : 'Draft';
+
+  return {
+    backendId: String(draft.id),
+    id: draft.number,
+    customer: draft.customer_name,
+    customerEmail: draft.customer_email,
+    source: draft.source ?? 'Manual',
+    items: draft.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0,
+    total: toMajorUnits(draft.total),
+    status,
+    updatedAt: formatDate(draft.updated_at),
+    note: draft.note ?? '',
+    previewImages: [],
+  };
+}
+
 export async function fetchCustomers(options: ApiClientOptions = {}) {
   const client = createApiClient(options);
   const response = await client.request<{ data: ApiCustomer[] }>('/customers');
 
   return response.data.map(mapCustomerFromApi);
+}
+
+export async function createCustomer(
+  payload: { name: string; email: string; status: CustomerRecord['status'] },
+  options: ApiClientOptions = {},
+) {
+  const client = createApiClient(options);
+  const response = await client.request<{ data: ApiCustomer }>('/customers', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return mapCustomerFromApi(response.data);
+}
+
+export async function updateCustomer(
+  customerId: string,
+  payload: { name?: string; email?: string; status?: CustomerRecord['status'] },
+  options: ApiClientOptions = {},
+) {
+  const client = createApiClient(options);
+  const response = await client.request<{ data: ApiCustomer }>(`/customers/${customerId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  return mapCustomerFromApi(response.data);
+}
+
+export async function addCustomerNote(customerId: string, message: string, options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  const response = await client.request<{ data: ApiCustomer }>(`/customers/${customerId}/notes`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
+
+  return mapCustomerFromApi(response.data);
+}
+
+export async function deleteCustomer(customerId: string, options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  await client.request<void>(`/customers/${customerId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function contactCustomer(customerId: string, channel: 'Email' | 'WhatsApp', message: string, options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  await client.request<{ data: unknown }>(`/customers/${customerId}/contact`, {
+    method: 'POST',
+    body: JSON.stringify({ channel, message }),
+  });
+}
+
+export async function deactivateCustomer(customerId: string, options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  const response = await client.request<{ data: ApiCustomer }>(`/customers/${customerId}/deactivate`, {
+    method: 'POST',
+  });
+
+  return mapCustomerFromApi(response.data);
 }
 
 export async function fetchOrders(options: ApiClientOptions = {}) {
@@ -184,9 +291,55 @@ export async function fetchOrders(options: ApiClientOptions = {}) {
   return response.data.map(mapOrderFromApi);
 }
 
+export interface CreateOrderPayload {
+  customer: {
+    name: string;
+    email: string;
+    phone?: string;
+  };
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
+  paymentMethod?: string;
+  paymentStatus?: PaymentStatus;
+  shippingAddress?: Partial<ShippingAddress>;
+}
+
+export async function createOrder(payload: CreateOrderPayload, options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  const response = await client.request<{ data: ApiOrder }>('/orders', {
+    method: 'POST',
+    body: JSON.stringify({
+      customer: payload.customer,
+      items: payload.items.map((item) => ({
+        product_id: Number(item.productId),
+        quantity: item.quantity,
+      })),
+      payment_method: payload.paymentMethod,
+      payment_status: payload.paymentStatus?.toLowerCase(),
+      shipping_address: payload.shippingAddress ? {
+        recipient: payload.shippingAddress.recipient,
+        line1: payload.shippingAddress.line1,
+        line2: payload.shippingAddress.line2,
+        city: payload.shippingAddress.city,
+        country: payload.shippingAddress.country,
+      } : undefined,
+    }),
+  });
+
+  return mapOrderFromApi(response.data);
+}
+
 export async function updateOrderStatus(
   orderId: string,
-  patch: { fulfillmentStatus?: FulfillmentStatus; paymentStatus?: PaymentStatus; trackingNumber?: string; courier?: string },
+  patch: {
+    fulfillmentStatus?: FulfillmentStatus;
+    paymentStatus?: PaymentStatus;
+    settlementStatus?: SettlementStatus;
+    trackingNumber?: string;
+    courier?: string;
+  },
   options: ApiClientOptions = {},
 ) {
   const client = createApiClient(options);
@@ -196,6 +349,7 @@ export async function updateOrderStatus(
     body: JSON.stringify({
       fulfillment_status: patch.fulfillmentStatus ? toApiFulfillmentStatus(patch.fulfillmentStatus) : undefined,
       payment_status: patch.paymentStatus ? patch.paymentStatus.toLowerCase() : undefined,
+      settlement_status: patch.settlementStatus ? patch.settlementStatus.toLowerCase() : undefined,
       tracking_number: patch.trackingNumber,
       courier: patch.courier,
     }),
@@ -204,11 +358,138 @@ export async function updateOrderStatus(
   return mapOrderFromApi(response.data);
 }
 
+export async function deleteOrder(orderId: string, options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  const normalizedId = orderId.replace(/^#/, '');
+  await client.request<void>(`/orders/${normalizedId}`, {
+    method: 'DELETE',
+  });
+}
+
+export interface CreateDraftOrderPayload {
+  customerName: string;
+  customerEmail: string;
+  source?: string;
+  note?: string;
+  status?: DraftOrderRecord['status'];
+  items: Array<{
+    name: string;
+    sku?: string;
+    quantity: number;
+    price: number;
+  }>;
+}
+
+function toApiDraftStatus(status?: DraftOrderRecord['status']) {
+  if (status === 'Invoice Sent') return 'invoice_sent';
+  if (status === 'Converted') return 'converted';
+  return 'draft';
+}
+
+function draftPayloadToApi(payload: CreateDraftOrderPayload) {
+  return {
+    customer_name: payload.customerName,
+    customer_email: payload.customerEmail,
+    source: payload.source,
+    note: payload.note,
+    status: toApiDraftStatus(payload.status),
+    items: payload.items.map((item) => ({
+      name: item.name,
+      sku: item.sku,
+      quantity: item.quantity,
+      price: Math.round(item.price * 100),
+    })),
+  };
+}
+
+export async function fetchDraftOrders(options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  const response = await client.request<{ data: ApiDraftOrder[] }>('/draft-orders');
+
+  return response.data.map(mapDraftOrderFromApi);
+}
+
+export async function createDraftOrder(payload: CreateDraftOrderPayload, options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  const response = await client.request<{ data: ApiDraftOrder }>('/draft-orders', {
+    method: 'POST',
+    body: JSON.stringify(draftPayloadToApi(payload)),
+  });
+
+  return mapDraftOrderFromApi(response.data);
+}
+
+export async function updateDraftOrder(draftId: string, payload: Partial<CreateDraftOrderPayload>, options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  const response = await client.request<{ data: ApiDraftOrder }>(`/draft-orders/${draftId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(draftPayloadToApi({
+      customerName: payload.customerName ?? '',
+      customerEmail: payload.customerEmail ?? 'draft@example.test',
+      source: payload.source,
+      note: payload.note,
+      status: payload.status,
+      items: payload.items ?? [{ name: 'Draft item', quantity: 1, price: 0 }],
+    })),
+  });
+
+  return mapDraftOrderFromApi(response.data);
+}
+
+export async function deleteDraftOrder(draftId: string, options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  await client.request<void>(`/draft-orders/${draftId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function convertDraftOrder(
+  draftId: string,
+  payload: { paymentStatus?: PaymentStatus; paymentMethod?: string } = {},
+  options: ApiClientOptions = {},
+) {
+  const client = createApiClient(options);
+  const response = await client.request<{ data: { order: ApiOrder; draft: ApiDraftOrder } }>(`/draft-orders/${draftId}/convert`, {
+    method: 'POST',
+    body: JSON.stringify({
+      payment_status: payload.paymentStatus?.toLowerCase(),
+      payment_method: payload.paymentMethod,
+    }),
+  });
+
+  return {
+    order: mapOrderFromApi(response.data.order),
+    draft: mapDraftOrderFromApi(response.data.draft),
+  };
+}
+
+export async function sendDraftInvoice(draftId: string, options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  const response = await client.request<{ data: { draft: ApiDraftOrder } }>(`/draft-orders/${draftId}/send-invoice`, {
+    method: 'POST',
+  });
+
+  return mapDraftOrderFromApi(response.data.draft);
+}
+
 export async function fetchReviews(options: ApiClientOptions = {}) {
   const client = createApiClient(options);
   const response = await client.request<{ data: ApiReview[] }>('/reviews');
 
   return response.data.map(mapReviewFromApi);
+}
+
+export async function exportReviewReport(options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  const response = await client.request<{
+    data: ApiReview[];
+    summary: { total: number; average_rating: number; pending: number; approved: number; featured: number; hidden: number };
+  }>('/reviews/export');
+
+  return {
+    reviews: response.data.map(mapReviewFromApi),
+    summary: response.summary,
+  };
 }
 
 export async function updateReviewStatus(reviewId: string, status: ReviewRecord['status'], options: ApiClientOptions = {}) {
@@ -219,4 +500,11 @@ export async function updateReviewStatus(reviewId: string, status: ReviewRecord[
   });
 
   return mapReviewFromApi(response.data);
+}
+
+export async function deleteReview(reviewId: string, options: ApiClientOptions = {}) {
+  const client = createApiClient(options);
+  await client.request<void>(`/reviews/${reviewId}`, {
+    method: 'DELETE',
+  });
 }

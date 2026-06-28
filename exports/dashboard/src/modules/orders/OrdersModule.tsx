@@ -20,9 +20,22 @@ import {
   X,
 } from 'lucide-react';
 import { API_STORAGE_KEYS } from '../../api/http';
-import { fetchOrders } from '../../api/commerce';
+import {
+  convertDraftOrder,
+  createDraftOrder,
+  createOrder,
+  deleteOrder,
+  fetchDraftOrders,
+  fetchOrders,
+  sendDraftInvoice,
+  updateOrderStatus,
+  type CreateOrderPayload,
+  type DraftOrderRecord,
+} from '../../api/commerce';
+import { createCatalogApi } from '../../api/catalog';
 import { orderKpiMetrics, orders } from './data';
 import type { Order } from './types';
+import type { Product } from '../products/types';
 import { BulkShipmentModal } from './BulkShipmentModal';
 import { getCourierSettingByName, getEnabledCourierSettings } from './shippingSettings';
 import { StatusBadge } from './StatusBadge';
@@ -49,14 +62,18 @@ type ReminderChannel = 'smart' | 'email' | 'sms' | 'whatsapp';
 
 const tabs = ['All Orders', 'Draft Orders', 'Abandoned Checkouts'] as const;
 
-const draftOrders = [
+const demoDraftOrders: DraftOrderRecord[] = [
   {
+    backendId: '',
     id: 'DRAFT-104',
     customer: 'Nur Amirah',
+    customerEmail: 'nur.amirah@example.com',
     source: 'WhatsApp order',
     items: 3,
     total: 780,
+    status: 'Draft',
     updatedAt: 'Apr 21, 2026',
+    note: '',
     previewImages: [
       'https://picsum.photos/seed/draft-abaya/48/48',
       'https://picsum.photos/seed/draft-hijab/48/48',
@@ -64,12 +81,16 @@ const draftOrders = [
     ],
   },
   {
+    backendId: '',
     id: 'DRAFT-103',
     customer: 'Siti Hajar',
+    customerEmail: 'siti.hajar@example.com',
     source: 'Offline boutique',
     items: 1,
     total: 360,
+    status: 'Draft',
     updatedAt: 'Apr 20, 2026',
+    note: '',
     previewImages: ['https://picsum.photos/seed/draft-dress/48/48'],
   },
 ];
@@ -177,6 +198,8 @@ function hasApiToken() {
 
 export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps) {
   const [orderRecords, setOrderRecords] = useState<Order[]>(orders);
+  const [draftOrderRecords, setDraftOrderRecords] = useState<DraftOrderRecord[]>(demoDraftOrders);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [showBulkShipment, setShowBulkShipment] = useState(false);
   const [actionDialog, setActionDialog] = useState<ActionDialogState | null>(null);
@@ -203,6 +226,15 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
   useEffect(() => {
     if (!hasApiToken()) return;
 
+    const catalogApi = createCatalogApi();
+    catalogApi.listProducts()
+      .then((items) => {
+        setCatalogProducts(items.filter((product) => product.status === 'Active' && product.stock > 0));
+      })
+      .catch(() => {
+        setCatalogProducts([]);
+      });
+
     fetchOrders()
       .then((items) => {
         if (items.length > 0) {
@@ -212,6 +244,16 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
       })
       .catch(() => {
         // Keep bundled demo orders available when backend is offline.
+      });
+
+    fetchDraftOrders()
+      .then((items) => {
+        if (items.length > 0) {
+          setDraftOrderRecords(items);
+        }
+      })
+      .catch(() => {
+        // Keep bundled demo drafts available when backend is offline.
       });
   }, []);
 
@@ -260,6 +302,134 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
     });
   };
 
+  const mergeOrderRecord = (updatedOrder: Order) => {
+    setOrderRecords((current) => current.map((order) => (order.id === updatedOrder.id ? updatedOrder : order)));
+  };
+
+  const updateOrderLocally = (currentOrder: Order, patch: Partial<Pick<Order, 'paymentStatus' | 'settlementStatus' | 'fulfillmentStatus'>> & {
+    courier?: string;
+    trackingNumber?: string;
+  }) => ({
+    ...currentOrder,
+    paymentStatus: patch.paymentStatus ?? currentOrder.paymentStatus,
+    settlementStatus: patch.settlementStatus ?? currentOrder.settlementStatus,
+    fulfillmentStatus: patch.fulfillmentStatus ?? currentOrder.fulfillmentStatus,
+    shipment: {
+      ...currentOrder.shipment,
+      courier: patch.courier ?? currentOrder.shipment.courier,
+      trackingNumber: patch.trackingNumber ?? currentOrder.shipment.trackingNumber,
+      status: patch.fulfillmentStatus ?? currentOrder.shipment.status,
+      trackingLocation: patch.trackingNumber ? 'Tracking number saved' : currentOrder.shipment.trackingLocation,
+    },
+  });
+
+  const persistOrderStatus = async (
+    currentOrder: Order,
+    patch: Parameters<typeof updateOrderStatus>[1],
+    fallback: Partial<Pick<Order, 'paymentStatus' | 'settlementStatus' | 'fulfillmentStatus'>> & { courier?: string; trackingNumber?: string },
+  ) => {
+    if (hasApiToken() && currentOrder.backendId) {
+      const updatedOrder = await updateOrderStatus(currentOrder.backendId, patch);
+      mergeOrderRecord(updatedOrder);
+      return updatedOrder;
+    }
+
+    const updatedOrder = updateOrderLocally(currentOrder, fallback);
+    mergeOrderRecord(updatedOrder);
+    return updatedOrder;
+  };
+
+  const createManualOrder = async (payload: CreateOrderPayload) => {
+    if (!hasApiToken()) {
+      throw new Error('Backend session required.');
+    }
+
+    const newOrder = await createOrder(payload);
+    setOrderRecords((current) => [newOrder, ...current]);
+    setOrderTimelineMap((current) => ({
+      ...current,
+      [newOrder.id]: createOrderTimelineSeed(newOrder),
+    }));
+    setSelectedOrderIds([]);
+    showBanner('Order created', `${newOrder.id} was created and customer notification is queued.`);
+    window.location.hash = `/orders/${routeId(newOrder.id)}`;
+
+    return newOrder;
+  };
+
+  const deleteSelectedOrders = async () => {
+    const backendOrders = selectedOrders.filter((order) => order.backendId);
+
+    if (backendOrders.length > 0) {
+      await Promise.all(backendOrders.map((order) => deleteOrder(order.backendId ?? order.id)));
+    }
+
+    setOrderRecords((current) => current.filter((order) => !selectedOrderIds.includes(order.id)));
+    setOrderTimelineMap((current) => {
+      const next = { ...current };
+      selectedOrderIds.forEach((id) => {
+        delete next[id];
+      });
+      return next;
+    });
+    showBanner('Orders deleted', `${selectedOrderIds.length} selected orders were deleted and inventory was restored by backend.`);
+    setSelectedOrderIds([]);
+  };
+
+  const saveDraftOrder = async (status: DraftOrderRecord['status'] = 'Draft') => {
+    if (!hasApiToken()) {
+      showBanner('Draft saved locally', 'Login with backend session to persist draft orders.');
+      return;
+    }
+
+    const draft = await createDraftOrder({
+      customerName: 'Nur Amirah',
+      customerEmail: 'nur.amirah@example.com',
+      source: 'WhatsApp order',
+      status,
+      note: status === 'Invoice Sent' ? 'Invoice sent from draft workspace.' : 'Saved from draft workspace.',
+      items: [
+        { name: 'Silk Midnight Abaya', sku: 'ABY-LGC-097', quantity: 1, price: 420 },
+        { name: 'Premium Chiffon Hijab', sku: 'HJB-NJR-097', quantity: 2, price: 110 },
+      ],
+    });
+
+    setDraftOrderRecords((current) => [draft, ...current.filter((item) => item.id !== draft.id)]);
+    showBanner(status === 'Invoice Sent' ? 'Invoice draft saved' : 'Draft saved', `${draft.id} persisted in Draft Orders.`);
+  };
+
+  const convertDraftToOrder = async (draft: DraftOrderRecord) => {
+    if (!draft.backendId) {
+      showBanner('Demo draft only', 'Save this draft to backend before converting it into an order.');
+      return;
+    }
+
+    const result = await convertDraftOrder(draft.backendId, {
+      paymentStatus: 'Pending',
+      paymentMethod: 'Manual transfer',
+    });
+
+    setOrderRecords((current) => [result.order, ...current]);
+    setDraftOrderRecords((current) => current.map((item) => (item.backendId === draft.backendId ? result.draft : item)));
+    setOrderTimelineMap((current) => ({
+      ...current,
+      [result.order.id]: createOrderTimelineSeed(result.order),
+    }));
+    showBanner('Draft converted', `${draft.id} became ${result.order.id}. Customer notification queued.`);
+    window.location.hash = `/orders/${routeId(result.order.id)}`;
+  };
+
+  const sendExistingDraftInvoice = async (draft: DraftOrderRecord) => {
+    if (!draft.backendId) {
+      showBanner('Demo draft only', 'Save this draft to backend before sending invoice.');
+      return;
+    }
+
+    const updatedDraft = await sendDraftInvoice(draft.backendId);
+    setDraftOrderRecords((current) => current.map((item) => (item.backendId === draft.backendId ? updatedDraft : item)));
+    showBanner('Invoice queued', `Invoice email for ${draft.id} was queued to ${draft.customerEmail}.`);
+  };
+
   return (
     <>
       {selectedOrder && subSection === 'shipment-processing' ? (
@@ -290,23 +460,58 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
               confirmLabel: 'Done',
             })
           }
+          onConfirmPayment={async () => {
+            try {
+              const updatedOrder = await persistOrderStatus(
+                selectedOrder,
+                { paymentStatus: 'Paid', settlementStatus: 'Processing', fulfillmentStatus: 'Processing' },
+                { paymentStatus: 'Paid', settlementStatus: 'Processing', fulfillmentStatus: 'Processing' },
+              );
+              setFulfillmentStageMap((current) => ({ ...current, [updatedOrder.id]: 'Processing' }));
+              appendTimelineEntry(updatedOrder.id, {
+                title: 'Payment confirmed',
+                description: 'Manual payment was verified and the order moved into processing.',
+                tone: 'success',
+              });
+              showBanner('Payment confirmed', `${updatedOrder.id} is now paid and ready for fulfillment.`);
+            } catch {
+              showBanner('Payment update failed', 'Backend could not confirm payment for this order. Please try again.');
+            }
+          }}
           onMarkShipped={() => {
-            setFulfillmentStageMap((current) => ({ ...current, [selectedOrder.id]: 'Shipped' }));
-            appendTimelineEntry(selectedOrder.id, {
-              title: 'Order marked as shipped',
-              description: 'Seller moved fulfillment forward manually while waiting for courier-side delivery confirmation.',
-              tone: 'success',
-            });
-            showBanner('Marked as shipped', `${selectedOrder.id} has been moved to shipped status for the current session.`);
+            void persistOrderStatus(
+              selectedOrder,
+              { fulfillmentStatus: 'Shipped' },
+              { fulfillmentStatus: 'Shipped' },
+            )
+              .then((updatedOrder) => {
+                setFulfillmentStageMap((current) => ({ ...current, [updatedOrder.id]: 'Shipped' }));
+                appendTimelineEntry(updatedOrder.id, {
+                  title: 'Order marked as shipped',
+                  description: 'Seller moved fulfillment forward manually while waiting for courier-side delivery confirmation.',
+                  tone: 'success',
+                });
+                showBanner('Marked as shipped', `${updatedOrder.id} has been moved to shipped status.`);
+              })
+              .catch(() => showBanner('Fulfillment update failed', 'Backend could not mark this order as shipped.'));
           }
           }
           onUpdateFulfillmentStage={(stage) => {
-            setFulfillmentStageMap((current) => ({ ...current, [selectedOrder.id]: stage }));
-            appendTimelineEntry(selectedOrder.id, {
-              title: `Fulfillment stage updated to ${stage}`,
-              description: 'Seller adjusted the operational stage for warehouse and support visibility.',
-            });
-            showBanner('Fulfillment updated', `${selectedOrder.id} is now set to ${stage}.`);
+            const fulfillmentStatus = mapSellerStageToBadge(stage);
+            void persistOrderStatus(
+              selectedOrder,
+              { fulfillmentStatus },
+              { fulfillmentStatus },
+            )
+              .then((updatedOrder) => {
+                setFulfillmentStageMap((current) => ({ ...current, [updatedOrder.id]: stage }));
+                appendTimelineEntry(updatedOrder.id, {
+                  title: `Fulfillment stage updated to ${stage}`,
+                  description: 'Seller adjusted the operational stage for warehouse and support visibility.',
+                });
+                showBanner('Fulfillment updated', `${updatedOrder.id} is now set to ${stage}.`);
+              })
+              .catch(() => showBanner('Fulfillment update failed', 'Backend could not update this order stage.'));
           }}
           onSendInvoice={() => {
             setSendInvoiceDraft({
@@ -344,13 +549,17 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
         />
       ) : activeTab === 'New Order' ? (
         <CreateNewOrderPage
+          products={catalogProducts}
           onAddProduct={() =>
             openActionDialog({
               title: 'Product picker',
-              description: 'Product search, variant selection, and quantity editing will plug into catalog data in the next backend phase.',
+              description: catalogProducts.length > 0
+                ? 'Choose an active catalog product, quantity, customer, and shipping details before creating the order.'
+                : 'No active in-stock catalog product is available yet. Add or publish a product first.',
               confirmLabel: 'Got it',
             })
           }
+          onCreateOrder={createManualOrder}
           onSaveDraft={() => {
             showBanner('Draft saved', 'Manual order draft was saved and is now visible under Draft Orders.');
             window.location.hash = '/orders/drafts';
@@ -366,6 +575,7 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
       ) : activeTab === 'Draft Orders' ? (
         <OrdersShell activeTab={activeTab} banner={banner} onExportCsv={() => showBanner('Draft export queued', 'Draft orders CSV export was prepared for staff review.')}>
           <DraftOrdersPage
+            drafts={draftOrderRecords}
             onCreateClient={() =>
               openActionDialog({
                 title: 'Create new client',
@@ -373,10 +583,22 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
                 confirmLabel: 'Continue',
               })
             }
-            onSaveDraft={() => showBanner('Draft updated', 'Draft order changes were saved successfully in the current workspace.')}
+            onSaveDraft={() => {
+              saveDraftOrder('Draft')
+                .catch(() => showBanner('Draft save failed', 'Backend could not save this draft order.'));
+            }}
             onSendInvoice={() =>
-              showBanner('Invoice sent', 'Draft invoice was prepared and sent to the selected customer contact flow.')
+              saveDraftOrder('Invoice Sent')
+                .catch(() => showBanner('Invoice save failed', 'Backend could not save this invoice draft.'))
             }
+            onSendDraftInvoice={(draft) => {
+              sendExistingDraftInvoice(draft)
+                .catch(() => showBanner('Invoice send failed', 'Backend could not queue this invoice email.'));
+            }}
+            onConvertDraft={(draft) => {
+              convertDraftToOrder(draft)
+                .catch(() => showBanner('Convert failed', 'Backend could not convert this draft into an order.'));
+            }}
           />
         </OrdersShell>
       ) : activeTab === 'Abandoned Checkouts' ? (
@@ -416,13 +638,33 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
             onDeleteSelected={() =>
               openActionDialog({
                 title: 'Delete selected orders',
-                description: `This mock flow will remove ${selectedOrderIds.length} selected orders after backend permissions are connected.`,
-                confirmLabel: 'Acknowledge',
+                description: `Delete ${selectedOrderIds.length} selected orders? Backend orders will restore product stock and recalculate customer totals.`,
+                confirmLabel: 'Delete',
+                onConfirm: () => {
+                  deleteSelectedOrders()
+                    .catch(() => showBanner('Delete failed', 'Backend could not delete selected orders. Try again.'));
+                },
               })
             }
-            onMarkSelectedShipped={() =>
-              showBanner('Orders updated', `${selectedOrderIds.length} selected orders were marked as shipped in the current mock flow.`)
-            }
+            onMarkSelectedShipped={() => {
+              Promise.all(selectedOrders.map((currentOrder) => persistOrderStatus(
+                currentOrder,
+                { fulfillmentStatus: 'Shipped' },
+                { fulfillmentStatus: 'Shipped' },
+              )))
+                .then((updatedOrders) => {
+                  updatedOrders.forEach((updatedOrder) => {
+                    appendTimelineEntry(updatedOrder.id, {
+                      title: 'Marked shipped',
+                      description: 'Bulk action moved this order into shipped fulfillment status.',
+                      tone: 'success',
+                    });
+                  });
+                  showBanner('Orders updated', `${updatedOrders.length} selected orders were marked as shipped.`);
+                  setSelectedOrderIds([]);
+                })
+                .catch(() => showBanner('Bulk update failed', 'Backend could not mark selected orders as shipped. Try again.'));
+            }}
             onOpenOrder={openOrder}
             onPrintSelected={() => {
               if (selectedOrders.length === 1) {
@@ -471,18 +713,31 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
           existing={manualTrackingMap[manualTrackingOrderId]}
           onClose={() => setManualTrackingOrderId(null)}
           onSave={(data) => {
-            setManualTrackingMap((prev) => ({ ...prev, [manualTrackingOrderId]: data }));
-            setFulfillmentStageMap((current) => ({ ...current, [manualTrackingOrderId]: 'Shipped' }));
-            appendTimelineEntry(manualTrackingOrderId, {
-              title: 'Manual tracking saved',
-              description: `Tracking ${data.trackingNumber} via ${data.courierName} was keyed in manually because courier automation is not connected yet.`,
-              tone: 'success',
-            });
-            setManualTrackingOrderId(null);
-            showBanner(
-              'Tracking number saved',
-              `${data.trackingNumber} via ${data.courierName} has been recorded for ${manualTrackingOrderId}. Order moved to shipped.`,
-            );
+            const currentOrder = orderRecords.find((item) => item.id === manualTrackingOrderId);
+            if (!currentOrder) {
+              return;
+            }
+
+            void persistOrderStatus(
+              currentOrder,
+              { fulfillmentStatus: 'Shipped', trackingNumber: data.trackingNumber, courier: data.courierName },
+              { fulfillmentStatus: 'Shipped', trackingNumber: data.trackingNumber, courier: data.courierName },
+            )
+              .then((updatedOrder) => {
+                setManualTrackingMap((prev) => ({ ...prev, [updatedOrder.id]: data }));
+                setFulfillmentStageMap((current) => ({ ...current, [updatedOrder.id]: 'Shipped' }));
+                appendTimelineEntry(updatedOrder.id, {
+                  title: 'Manual tracking saved',
+                  description: `Tracking ${data.trackingNumber} via ${data.courierName} was keyed in manually because courier automation is not connected yet.`,
+                  tone: 'success',
+                });
+                setManualTrackingOrderId(null);
+                showBanner(
+                  'Tracking number saved',
+                  `${data.trackingNumber} via ${data.courierName} has been recorded for ${updatedOrder.id}. Order moved to shipped.`,
+                );
+              })
+              .catch(() => showBanner('Tracking save failed', 'Backend could not save this tracking number.'));
           }}
         />
       )}
@@ -774,11 +1029,17 @@ function SearchBar({
 }
 
 function DraftOrdersPage({
+  drafts,
   onCreateClient,
+  onConvertDraft,
+  onSendDraftInvoice,
   onSendInvoice,
   onSaveDraft,
 }: {
+  drafts: DraftOrderRecord[];
   onCreateClient: () => void;
+  onConvertDraft: (draft: DraftOrderRecord) => void;
+  onSendDraftInvoice: (draft: DraftOrderRecord) => void;
   onSendInvoice: () => void;
   onSaveDraft: () => void;
 }) {
@@ -833,17 +1094,21 @@ function DraftOrdersPage({
                       <th className="px-4 py-3">Items Preview</th>
                       <th className="px-4 py-3">Total</th>
                       <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/20">
-                    {draftOrders.map((draft) => (
+                    {drafts.map((draft) => (
                       <tr key={draft.id} className="hover:bg-surface-low">
                         <td className="px-4 py-4 font-mono text-sm font-semibold text-primary">{draft.id}</td>
-                        <td className="px-4 py-4 text-sm font-medium">{draft.customer}</td>
+                        <td className="px-4 py-4">
+                          <span className="block text-sm font-medium">{draft.customer}</span>
+                          <span className="block text-xs text-on-surface-variant">{draft.customerEmail}</span>
+                        </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
                             <div className="flex -space-x-2">
-                              {draft.previewImages.slice(0, 3).map((imageUrl) => (
+                              {(draft.previewImages.length > 0 ? draft.previewImages : ['https://picsum.photos/seed/draft-api/48/48']).slice(0, 3).map((imageUrl) => (
                                 <img
                                   key={`${draft.id}-${imageUrl}`}
                                   alt=""
@@ -857,7 +1122,27 @@ function DraftOrdersPage({
                           </div>
                         </td>
                         <td className="px-4 py-4 text-sm font-semibold">${draft.total.toLocaleString()}</td>
-                        <td className="px-4 py-4"><StatusBadge status="Pending" /></td>
+                        <td className="px-4 py-4"><StatusBadge status={draft.status === 'Converted' ? 'Paid' : 'Pending'} /></td>
+                        <td className="px-4 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              className="rounded border border-outline-variant/30 px-3 py-1.5 text-xs font-medium hover:bg-surface-low disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={draft.status === 'Converted'}
+                              onClick={() => onSendDraftInvoice(draft)}
+                              type="button"
+                            >
+                              Send Invoice
+                            </button>
+                            <button
+                              className="rounded border border-outline-variant/30 px-3 py-1.5 text-xs font-medium hover:bg-surface-low disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={draft.status === 'Converted'}
+                              onClick={() => onConvertDraft(draft)}
+                              type="button"
+                            >
+                              Convert
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1104,14 +1389,74 @@ function AbandonedCheckoutsPage({
 }
 
 function CreateNewOrderPage({
+  products,
   onAddProduct,
+  onCreateOrder,
   onSaveDraft,
   onSendInvoice,
 }: {
+  products: Product[];
   onAddProduct: () => void;
+  onCreateOrder: (payload: CreateOrderPayload) => Promise<Order>;
   onSaveDraft: () => void;
   onSendInvoice: () => void;
 }) {
+  const [customerName, setCustomerName] = useState('Nur Amirah');
+  const [customerEmail, setCustomerEmail] = useState('nur.amirah@example.com');
+  const [customerPhone, setCustomerPhone] = useState('+60 12-888 3391');
+  const [productId, setProductId] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [paymentMethod, setPaymentMethod] = useState('Manual transfer');
+  const [line1, setLine1] = useState('No 12 Jalan Demo');
+  const [city, setCity] = useState('Kuala Lumpur');
+  const [country, setCountry] = useState('Malaysia');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!productId && products.length > 0) {
+      setProductId(products[0].id);
+    }
+  }, [productId, products]);
+
+  const selectedProduct = products.find((product) => product.id === productId);
+  const safeQuantity = Math.max(1, Math.min(quantity, selectedProduct?.stock ?? quantity));
+  const subtotal = selectedProduct ? selectedProduct.price * safeQuantity : 0;
+  const canCreate = Boolean(selectedProduct && customerName.trim() && customerEmail.trim() && safeQuantity > 0);
+
+  const submitOrder = async () => {
+    if (!selectedProduct || !canCreate) {
+      setError('Select a product and complete customer details first.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    try {
+      await onCreateOrder({
+        customer: {
+          name: customerName.trim(),
+          email: customerEmail.trim(),
+          phone: customerPhone.trim(),
+        },
+        items: [{ productId: selectedProduct.id, quantity: safeQuantity }],
+        paymentMethod,
+        paymentStatus: 'Pending',
+        shippingAddress: {
+          recipient: customerName.trim(),
+          line1,
+          city,
+          country,
+        },
+      });
+    } catch {
+      setError('Order failed. Check backend connection, product stock, and required fields.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <button className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline" onClick={() => (window.location.hash = '/orders')} type="button">
@@ -1128,17 +1473,38 @@ function CreateNewOrderPage({
         <div className="space-y-6">
           <Panel title="Customer">
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Customer name" defaultValue="Nur Amirah" />
-              <Field label="Email" defaultValue="nur.amirah@example.com" />
-              <Field label="Phone" defaultValue="+60 12-888 3391" />
-              <Field label="Order source" defaultValue="WhatsApp" />
+              <Field label="Customer name" value={customerName} onChange={setCustomerName} />
+              <Field label="Email" value={customerEmail} onChange={setCustomerEmail} />
+              <Field label="Phone" value={customerPhone} onChange={setCustomerPhone} />
+              <Field label="Order source" value="Manual admin order" readOnly />
             </div>
           </Panel>
 
           <Panel title="Products">
             <div className="space-y-3">
-              <LineItem imageUrl="https://picsum.photos/seed/lineitem-evening-abaya/120/120" name="Silk Evening Abaya" sku="ABY-SLK-004" quantity="1" price="$360" />
-              <LineItem imageUrl="https://picsum.photos/seed/lineitem-modal-hijab/120/120" name="Premium Modal Hijab" sku="HJB-MDL-018" quantity="2" price="$180" />
+              {selectedProduct ? (
+                <div className="grid gap-3 rounded border border-outline-variant/20 p-4 md:grid-cols-[minmax(0,1fr)_120px_120px]">
+                  <div className="flex items-start gap-3">
+                    {selectedProduct.thumbnailUrl && <img alt="" className="h-14 w-14 rounded object-cover" loading="lazy" referrerPolicy="no-referrer" src={selectedProduct.thumbnailUrl} />}
+                    <label className="block flex-1 space-y-2 text-sm font-medium">
+                      <span>Catalog product</span>
+                      <select className="w-full rounded border border-outline-variant/30 bg-surface px-3 py-2 text-sm" value={productId} onChange={(event) => setProductId(event.target.value)}>
+                        {products.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.title} · {product.sku} · {product.stock} stock
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <Field label="Quantity" min={1} max={selectedProduct.stock} type="number" value={String(safeQuantity)} onChange={(value) => setQuantity(Number(value))} />
+                  <Field label="Price" value={selectedProduct.price.toFixed(2)} readOnly />
+                </div>
+              ) : (
+                <div className="rounded border border-warning/30 bg-warning/5 p-4 text-sm text-warning">
+                  No active in-stock product found. Create or publish one in Products first.
+                </div>
+              )}
               <button className="rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low" onClick={onAddProduct} type="button">
                 Add Product
               </button>
@@ -1147,10 +1513,10 @@ function CreateNewOrderPage({
 
           <Panel title="Pricing & Shipping">
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Shipping fee" defaultValue="20" />
-              <Field label="Discount" defaultValue="0" />
-              <Field label="Payment method" defaultValue="Manual transfer" />
-              <Field label="Invoice note" defaultValue="Send payment confirmation after transfer" />
+              <Field label="Address" value={line1} onChange={setLine1} />
+              <Field label="City" value={city} onChange={setCity} />
+              <Field label="Country" value={country} onChange={setCountry} />
+              <Field label="Payment method" value={paymentMethod} onChange={setPaymentMethod} />
             </div>
           </Panel>
         </div>
@@ -1158,11 +1524,17 @@ function CreateNewOrderPage({
         <aside className="space-y-6">
           <Panel title="Actions">
             <div className="space-y-3">
-              <button className="w-full rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim" onClick={onSaveDraft} type="button">
-                Save as Draft
+              {error && (
+                <div className="rounded border border-error/30 bg-error/5 p-3 text-sm text-error">{error}</div>
+              )}
+              <button className="w-full rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60" disabled={!canCreate || saving} onClick={submitOrder} type="button">
+                {saving ? 'Creating...' : 'Create Order'}
               </button>
               <button className="w-full rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low" onClick={onSendInvoice} type="button">
                 Send Invoice
+              </button>
+              <button className="w-full rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low" onClick={onSaveDraft} type="button">
+                Save as Draft
               </button>
               <button className="w-full rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low" onClick={() => (window.location.hash = '/orders/drafts')} type="button">
                 View Draft Orders
@@ -1172,10 +1544,10 @@ function CreateNewOrderPage({
 
           <Panel title="Order Summary">
             <div className="space-y-3">
-              <Info label="Subtotal" value="$540" />
-              <Info label="Shipping" value="$20" />
-              <Info label="Total" value="$560" />
-              <Info label="Status" value="Draft" />
+              <Info label="Subtotal" value={`$${subtotal.toLocaleString()}`} />
+              <Info label="Shipping" value="$0" />
+              <Info label="Total" value={`$${subtotal.toLocaleString()}`} />
+              <Info label="Status" value="Pending payment" />
             </div>
           </Panel>
         </aside>
@@ -1339,6 +1711,7 @@ function OrderDetailPage({
   onGenerateShipment,
   onManualTracking,
   onPrintOrder,
+  onConfirmPayment,
   onMarkShipped,
   onUpdateFulfillmentStage,
   onSendInvoice,
@@ -1353,6 +1726,7 @@ function OrderDetailPage({
   onGenerateShipment: (orderId: string) => void;
   onManualTracking: () => void;
   onPrintOrder: () => void;
+  onConfirmPayment: () => void;
   onMarkShipped: () => void;
   onUpdateFulfillmentStage: (stage: SellerFulfillmentStage) => void;
   onSendInvoice: () => void;
@@ -1727,6 +2101,15 @@ function OrderDetailPage({
                 <div className="mt-2"><StatusBadge status={order.paymentStatus} /></div>
               </div>
               <Info label="Order total" value={`$${order.total.toLocaleString()}`} />
+              {order.paymentStatus === 'Pending' && (
+                <button
+                  className="w-full rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim"
+                  onClick={onConfirmPayment}
+                  type="button"
+                >
+                  Confirm Payment
+                </button>
+              )}
             </div>
           </Panel>
 
@@ -2525,11 +2908,38 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Field({ label, defaultValue }: { label: string; defaultValue: string }) {
+function Field({
+  label,
+  defaultValue,
+  value,
+  onChange,
+  type = 'text',
+  min,
+  max,
+  readOnly = false,
+}: {
+  label: string;
+  defaultValue?: string;
+  value?: string;
+  onChange?: (value: string) => void;
+  type?: string;
+  min?: number;
+  max?: number;
+  readOnly?: boolean;
+}) {
   return (
     <label className="block space-y-2 text-sm font-medium">
       <span>{label}</span>
-      <input className="w-full rounded border border-outline-variant/30 bg-surface px-3 py-2" defaultValue={defaultValue} />
+      <input
+        className="w-full rounded border border-outline-variant/30 bg-surface px-3 py-2 disabled:cursor-not-allowed disabled:opacity-70"
+        defaultValue={value === undefined ? defaultValue : undefined}
+        max={max}
+        min={min}
+        readOnly={readOnly}
+        type={type}
+        value={value}
+        onChange={(event) => onChange?.(event.target.value)}
+      />
     </label>
   );
 }
