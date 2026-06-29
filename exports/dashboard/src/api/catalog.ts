@@ -72,6 +72,7 @@ function mapApiVariantToProductVariant(variant: unknown, product: ApiProduct): P
   const name = String(data.name ?? data.title ?? 'Default');
   const stock = Number(data.stock ?? product.stock ?? 0);
   const rawPrice = typeof data.price === 'number' ? data.price : undefined;
+  const imageUrl = typeof data.imageUrl === 'string' ? data.imageUrl : typeof data.image_url === 'string' ? data.image_url : undefined;
 
   return {
     id: String((data.id ?? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')) || `${product.id}-variant`),
@@ -81,6 +82,7 @@ function mapApiVariantToProductVariant(variant: unknown, product: ApiProduct): P
     stock,
     stockState: resolveStockState(stock),
     lastUpdated: String(data.lastUpdated ?? data.last_updated ?? ''),
+    ...(imageUrl ? { imageUrl } : {}),
   };
 }
 

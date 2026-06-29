@@ -42,6 +42,7 @@ export interface ProductVariant {
   stock: number;
   stockState: StockState;
   lastUpdated: string;
+  imageUrl?: string;
 }
 
 export interface Category {

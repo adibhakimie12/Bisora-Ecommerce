@@ -40,6 +40,7 @@ import { uploadMediaFile } from '../../api/media';
 import { ApiError } from '../../api/http';
 import { shouldUseDemoData } from '../../liveDataMode';
 import { ProductStatusBadge } from './ProductStatusBadge';
+import { updateVariantOptionDraft as updateVariantOptionDraftState } from './variantEditorModel';
 import type { Category, CategoryDetailTab, Product, ProductTab, StockState } from './types';
 
 interface ProductsModuleProps {
@@ -60,6 +61,7 @@ interface ActionDialogState {
 }
 
 interface VariantOptionDraft {
+  id: string;
   name: string;
   values: string[];
   pendingValue: string;
@@ -1132,7 +1134,11 @@ function EditProductStudio({
   const [variantWeightDraft, setVariantWeightDraft] = useState(
     product.variants.map((variant) => [variant.name, String(product.weightKg ?? 0)] as const),
   );
+  const [variantImageDraft, setVariantImageDraft] = useState(
+    product.variants.map((variant) => [variant.name, variant.imageUrl ?? product.thumbnailUrl] as const),
+  );
   const [selectedVariantName, setSelectedVariantName] = useState(product.variants[0]?.name ?? 'Default');
+  const [mediaUploadTarget, setMediaUploadTarget] = useState<{ type: 'product' } | { type: 'variant'; variantName: string }>({ type: 'product' });
   const [descriptionHtmlMode, setDescriptionHtmlMode] = useState(false);
   const [openDescriptionMenu, setOpenDescriptionMenu] = useState<null | 'format' | 'table' | 'link' | 'align' | 'color' | 'size'>(null);
   const [pendingLinkUrl, setPendingLinkUrl] = useState('');
@@ -1184,6 +1190,7 @@ function EditProductStudio({
   const variantPriceMap = new Map(variantPriceDraft);
   const variantSkuMap = new Map(variantSkuDraft);
   const variantWeightMap = new Map(variantWeightDraft);
+  const variantImageMap = new Map(variantImageDraft);
   const builtVariantRows = useMemo(() => {
     const activeOptions = variantOptionDrafts.filter(
       (option) => option.name.trim() && option.values.length > 0,
@@ -1196,6 +1203,7 @@ function EditProductStudio({
         sku: variantSkuMap.get(variant.name) ?? variant.sku,
         price: Number(variantPriceMap.get(variant.name) ?? variant.price),
         stock: Number(variantStockMap.get(variant.name) ?? variant.stock),
+        imageUrl: variantImageMap.get(variant.name) ?? variant.imageUrl ?? product.thumbnailUrl,
         sortIndex: index,
       }));
     }
@@ -1228,10 +1236,11 @@ function EditProductStudio({
         sku: variantSkuMap.get(name) ?? existing?.sku ?? `${safeBaseSku}-${generatedSuffix || index + 1}`,
         price: Number(variantPriceMap.get(name) ?? existing?.price ?? Number(form.price || product.price || 0)),
         stock: Number(variantStockMap.get(name) ?? existing?.stock ?? 0),
+        imageUrl: variantImageMap.get(name) ?? existing?.imageUrl ?? product.thumbnailUrl,
         sortIndex: index,
       };
     });
-  }, [form.price, form.sku, product.price, product.sku, product.variants, variantOptionDrafts, variantStockMap, variantPriceMap, variantSkuMap]);
+  }, [form.price, form.sku, product.price, product.sku, product.thumbnailUrl, product.variants, variantOptionDrafts, variantStockMap, variantPriceMap, variantSkuMap, variantImageMap]);
 
   const totalVariantQuantity = useMemo(
     () => builtVariantRows.reduce((sum, variant) => sum + Number(variant.stock), 0),
@@ -1256,9 +1265,7 @@ function EditProductStudio({
     );
   };
   const updateVariantOptionDraft = (index: number, field: 'name' | 'pendingValue', value: string) => {
-    setVariantOptionDrafts((current) =>
-      current.map((entry, entryIndex) => (entryIndex === index ? { ...entry, [field]: value } : entry)),
-    );
+    setVariantOptionDrafts((current) => updateVariantOptionDraftState(current, index, field, value));
   };
   const addVariantOptionValue = (index: number) => {
     setVariantOptionDrafts((current) =>
@@ -1279,7 +1286,7 @@ function EditProductStudio({
   };
   const addVariantOption = () => {
     setShowVariantBuilder(true);
-    setVariantOptionDrafts((current) => [...current, { name: '', values: [], pendingValue: '' }]);
+    setVariantOptionDrafts((current) => [...current, { id: `option-${Date.now()}-${current.length}`, name: '', values: [], pendingValue: '' }]);
   };
   const removeVariantOption = (index: number) => {
     setVariantOptionDrafts((current) => current.filter((_, entryIndex) => entryIndex !== index));
@@ -1428,6 +1435,13 @@ function EditProductStudio({
     setPendingImageUrl('');
     setShowImageModal(false);
   };
+  const updateVariantImage = (variantName: string, imageUrl: string) => {
+    setVariantImageDraft((current) =>
+      current.some((entry) => entry[0] === variantName)
+        ? current.map((entry) => (entry[0] === variantName ? [variantName, imageUrl] : entry))
+        : [...current, [variantName, imageUrl] as const],
+    );
+  };
   const handleMediaFileChange = async (file?: File) => {
     if (!file || mediaUploadStatus === 'uploading') {
       return;
@@ -1445,14 +1459,21 @@ function EditProductStudio({
         throw new Error('Uploaded media did not return a public URL.');
       }
 
-      updateForm('thumbnailUrl', uploaded.publicUrl);
+      if (mediaUploadTarget.type === 'variant') {
+        updateVariantImage(mediaUploadTarget.variantName, uploaded.publicUrl);
+      } else {
+        updateForm('thumbnailUrl', uploaded.publicUrl);
+      }
       setPendingImageUrl(uploaded.publicUrl);
       setMediaUploadStatus('idle');
     } catch {
       setMediaUploadStatus('error');
     }
   };
-  const onUploadMedia = () => mediaInputRef.current?.click();
+  const onUploadMedia = (target: { type: 'product' } | { type: 'variant'; variantName: string } = { type: 'product' }) => {
+    setMediaUploadTarget(target);
+    mediaInputRef.current?.click();
+  };
   const handleInsertVideo = () => {
     insertDescriptionHtml(`<iframe src="${pendingVideoUrl || 'https://'}" title="Product video"></iframe>`);
     setPendingVideoUrl('');
@@ -1489,6 +1510,7 @@ function EditProductStudio({
       stock: Number(variantStockMap.get(variant.name) ?? variant.stock) || 0,
       stockState: deriveStockState(Number(variantStockMap.get(variant.name) ?? variant.stock) || 0),
       lastUpdated: 'Today',
+      imageUrl: variantImageMap.get(variant.name) ?? variant.imageUrl ?? form.thumbnailUrl,
     }));
     const nextRecord: Product = {
       ...product,
@@ -1937,7 +1959,7 @@ function EditProductStudio({
               />
               <div className="grid gap-3 sm:grid-cols-4">
               <img alt="" className="h-32 w-full rounded object-cover" referrerPolicy="no-referrer" src={form.thumbnailUrl} />
-              <button className="grid h-32 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-60" disabled={mediaUploadStatus === 'uploading'} onClick={onUploadMedia} type="button">
+              <button className="grid h-32 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-60" disabled={mediaUploadStatus === 'uploading'} onClick={() => onUploadMedia()} type="button">
                 <span className="flex items-center gap-2"><ImagePlus className="h-4 w-4" /> {mediaUploadStatus === 'uploading' ? 'Uploading...' : 'Add Images'}</span>
               </button>
               </div>
@@ -1970,7 +1992,7 @@ function EditProductStudio({
               {showVariantBuilder ? (
                 <div className="space-y-3 rounded border border-outline-variant/20 p-4">
                   {variantOptionDrafts.map((option, optionIndex) => (
-                    <div key={`${option.name}-${optionIndex}`} className="space-y-3 rounded border border-outline-variant/20 bg-surface-low p-4">
+                    <div key={option.id} className="space-y-3 rounded border border-outline-variant/20 bg-surface-low p-4">
                       <div className="flex items-center justify-between gap-3">
                         <Field
                           label={`Option ${optionIndex + 1} name`}
@@ -2121,7 +2143,7 @@ function EditProductStudio({
                     onClick={() => setSelectedVariantName(variant.name)}
                     type="button"
                   >
-                    <img alt="" className="h-10 w-10 rounded object-cover" referrerPolicy="no-referrer" src={form.thumbnailUrl} />
+                    <img alt="" className="h-10 w-10 rounded object-cover" referrerPolicy="no-referrer" src={selectedVariantImageUrl(variant, form.thumbnailUrl)} />
                     <span>{variant.name}</span>
                   </button>
                 ))}
@@ -2131,11 +2153,16 @@ function EditProductStudio({
                   <div className="space-y-3 rounded border border-outline-variant/20 p-4">
                     <p className="text-sm font-medium">Image</p>
                     <div className="flex items-center gap-3">
-                      <button className="rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low" onClick={onUploadMedia} type="button">
+                      <button className="rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low" onClick={() => onUploadMedia({ type: 'variant', variantName: selectedVariant.name })} type="button">
                         Add image
                       </button>
-                      <img alt="" className="h-14 w-14 rounded object-cover" referrerPolicy="no-referrer" src={form.thumbnailUrl} />
+                      <img alt="" className="h-14 w-14 rounded object-cover" referrerPolicy="no-referrer" src={selectedVariantImageUrl(selectedVariant, form.thumbnailUrl)} />
                     </div>
+                    <Field
+                      label="Variant image URL"
+                      value={variantImageMap.get(selectedVariant.name) ?? selectedVariant.imageUrl ?? form.thumbnailUrl}
+                      onChange={(value) => updateVariantImage(selectedVariant.name, value)}
+                    />
                   </div>
                   <div className="space-y-3 rounded border border-outline-variant/20 p-4">
                     <p className="text-sm font-medium">Options</p>
@@ -2215,8 +2242,8 @@ function EditProductStudio({
                 <div key={variant.id} className="space-y-2">
                   <p className="text-sm font-medium">{variant.name}</p>
                   <div className="flex gap-3">
-                    <img alt="" className="h-20 w-20 rounded object-cover" referrerPolicy="no-referrer" src={form.thumbnailUrl} />
-                    <button className="grid h-20 w-20 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant" onClick={onUploadMedia} type="button">
+                    <img alt="" className="h-20 w-20 rounded object-cover" referrerPolicy="no-referrer" src={selectedVariantImageUrl(variant, form.thumbnailUrl)} />
+                    <button className="grid h-20 w-20 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant" onClick={() => onUploadMedia({ type: 'variant', variantName: variant.name })} type="button">
                       +
                     </button>
                   </div>
@@ -3073,11 +3100,16 @@ function deriveVariantOptionDrafts(product: Product): VariantOptionDraft[] {
     );
 
     return {
+      id: `option-${index}-${fallbackNames[index] ?? index}`,
       name: fallbackNames[index] ?? `Option ${index + 1}`,
       values,
       pendingValue: '',
     };
   });
+}
+
+function selectedVariantImageUrl(variant: { imageUrl?: string }, fallback: string) {
+  return variant.imageUrl || fallback;
 }
 
 function duplicateProduct(product: Product): Product {
@@ -3125,7 +3157,7 @@ function createEmptyProductDraft(): Product {
     weightKg: 0,
     packageProfile: 'Pouch',
     variants: [
-      { id: 'var-new-1', name: 'Default', sku: 'NEW-SKU-001-DFT', price: 0, stock: 0, stockState: 'Out of Stock', lastUpdated: 'Today' },
+      { id: 'var-new-1', name: 'Default', sku: 'NEW-SKU-001-DFT', price: 0, stock: 0, stockState: 'Out of Stock', lastUpdated: 'Today', imageUrl: 'https://picsum.photos/seed/product-new/120/120' },
     ],
   };
 }

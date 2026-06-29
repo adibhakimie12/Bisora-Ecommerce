@@ -24,7 +24,7 @@ const apiProduct = {
   vendor: 'Bisora',
   product_type: 'Hijab',
   tags: ['modal', 'premium'],
-  variants: [{ id: 'rose', name: 'Rose', stock: 2 }],
+  variants: [{ id: 'rose', name: 'Rose', stock: 2, image_url: 'https://example.com/rose.jpg' }],
   seo_title: 'Premium Modal Hijab',
   seo_description: 'Shop premium modal hijab.',
 };
@@ -84,6 +84,7 @@ assert.deepEqual(mappedProduct.variants, [
     stock: 2,
     stockState: 'Low Stock',
     lastUpdated: '',
+    imageUrl: 'https://example.com/rose.jpg',
   },
 ]);
 
