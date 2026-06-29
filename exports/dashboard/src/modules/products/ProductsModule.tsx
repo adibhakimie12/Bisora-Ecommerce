@@ -1320,7 +1320,9 @@ function EditProductStudio({
   const saveDescriptionSelection = () => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
-    descriptionSelectionRef.current = selection.getRangeAt(0).cloneRange();
+    const range = selection.getRangeAt(0);
+    if (!isDescriptionRange(range, descriptionRef.current)) return;
+    descriptionSelectionRef.current = range.cloneRange();
   };
   const restoreDescriptionSelection = () => {
     const selection = window.getSelection();
@@ -1339,9 +1341,15 @@ function EditProductStudio({
     saveDescriptionSelection();
   };
   const toggleDescriptionBold = () => {
-    focusDescriptionEditor();
-    const isBold = document.queryCommandState('bold');
-    document.execCommand(isBold ? 'removeFormat' : 'bold', false);
+    const range = getActiveDescriptionRange(descriptionRef.current, descriptionSelectionRef.current);
+    if (!range) return;
+
+    const selection = window.getSelection();
+    if (!selection) return;
+    descriptionRef.current?.focus();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.execCommand('bold', false);
     syncDescriptionFromEditor();
     saveDescriptionSelection();
   };
@@ -3030,6 +3038,26 @@ function SummaryRow({ label, children }: { label: string; children: ReactNode })
 
 function preventToolbarMouseDown(event: React.MouseEvent) {
   event.preventDefault();
+}
+
+function getActiveDescriptionRange(root: HTMLElement | null, savedRange: Range | null) {
+  const selection = window.getSelection();
+  if (selection && selection.rangeCount > 0) {
+    const currentRange = selection.getRangeAt(0);
+    if (isDescriptionRange(currentRange, root) && !currentRange.collapsed) {
+      return currentRange.cloneRange();
+    }
+  }
+
+  if (savedRange && isDescriptionRange(savedRange, root) && !savedRange.collapsed) {
+    return savedRange.cloneRange();
+  }
+
+  return null;
+}
+
+function isDescriptionRange(range: Range, root: HTMLElement | null) {
+  return Boolean(root && root.contains(range.commonAncestorContainer));
 }
 
 function normalizeCategoryTab(subSection?: string): CategoryDetailTab {
