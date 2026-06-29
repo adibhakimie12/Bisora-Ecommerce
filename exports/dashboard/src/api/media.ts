@@ -1,4 +1,5 @@
 import { createApiClient, resolveApiBaseUrl, type ApiClientOptions } from './http';
+import { formatMediaSize, MAX_MEDIA_UPLOAD_BYTES, prepareImageForUpload } from './imageCompression';
 
 type ApiFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -18,6 +19,7 @@ export interface UploadMediaOptions extends ApiClientOptions {
   ownerType?: 'product' | 'category' | 'page' | 'theme' | 'blog' | 'store';
   ownerId?: string;
   visibility?: 'public' | 'private';
+  prepareFile?: (file: File) => Promise<File>;
 }
 
 export interface UploadedMedia {
@@ -43,13 +45,19 @@ export async function uploadMediaFile(file: File, options: UploadMediaOptions = 
   const baseUrl = (options.baseUrl ?? resolveApiBaseUrl({ env: (import.meta as unknown as { env?: Record<string, string | boolean | undefined> }).env })).replace(/\/$/, '');
   const fetcher: ApiFetch = options.fetcher ?? fetch;
   const client = createApiClient({ ...options, baseUrl, fetcher });
+  const uploadFile = await (options.prepareFile ?? prepareImageForUpload)(file);
+
+  if (uploadFile.size > MAX_MEDIA_UPLOAD_BYTES) {
+    throw new Error(`Image must be ${formatMediaSize(MAX_MEDIA_UPLOAD_BYTES)} or smaller after compression.`);
+  }
+
   const ownerId = Number(options.ownerId);
   const presign = await client.request<{ data: ApiMediaIntent }>('/media/presign', {
     method: 'POST',
     body: JSON.stringify({
-      filename: file.name,
-      mime_type: file.type || 'application/octet-stream',
-      size_bytes: file.size,
+      filename: uploadFile.name,
+      mime_type: uploadFile.type || 'application/octet-stream',
+      size_bytes: uploadFile.size,
       owner_type: options.ownerType,
       ...(Number.isFinite(ownerId) && ownerId > 0 ? { owner_id: ownerId } : {}),
       visibility: options.visibility ?? 'public',
@@ -58,8 +66,8 @@ export async function uploadMediaFile(file: File, options: UploadMediaOptions = 
 
   const uploadResponse = await fetcher(resolveUploadUrl(presign.data.upload_url, baseUrl), {
     method: 'PUT',
-    headers: presign.data.headers ?? { 'Content-Type': file.type },
-    body: file,
+    headers: presign.data.headers ?? { 'Content-Type': uploadFile.type },
+    body: uploadFile,
   });
 
   if (!uploadResponse.ok) {

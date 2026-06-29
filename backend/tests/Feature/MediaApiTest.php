@@ -81,6 +81,24 @@ class MediaApiTest extends TestCase
             ->assertJsonValidationErrors('size_bytes');
     }
 
+    public function test_media_presign_rejects_images_above_five_megabytes(): void
+    {
+        [$user, $tenant] = $this->createTenantUser();
+
+        $this->actingAs($user, 'sanctum')
+            ->withHeader('X-Tenant-Id', (string) $tenant->id)
+            ->postJson('/api/media/presign', [
+                'filename' => 'too-large.jpg',
+                'mime_type' => 'image/jpeg',
+                'size_bytes' => (5 * 1024 * 1024) + 1,
+                'owner_type' => 'product',
+                'owner_id' => 123,
+                'visibility' => 'public',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('size_bytes');
+    }
+
     public function test_media_complete_marks_asset_ready_and_returns_public_url(): void
     {
         [$user, $tenant] = $this->createTenantUser();

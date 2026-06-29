@@ -1964,7 +1964,7 @@ function EditProductStudio({
           <Panel title="Media">
             <div className="space-y-3">
               <p className="text-xs text-on-surface-variant">
-                Upload product images into storage and use the returned public URL as the storefront thumbnail.
+                Upload product images into storage. Large JPG, PNG, and WebP files are compressed before upload, with a 5MB safety limit.
               </p>
               <input
                 ref={mediaInputRef}
@@ -1993,7 +1993,7 @@ function EditProductStudio({
                 <span className="flex items-center gap-2"><ImagePlus className="h-4 w-4" /> {mediaUploadStatus === 'uploading' ? 'Uploading...' : 'Add Images'}</span>
               </button>
               </div>
-              {mediaUploadStatus === 'error' && <p className="text-xs text-error">Image upload failed. Check file type, size, and backend storage connection.</p>}
+              {mediaUploadStatus === 'error' && <p className="text-xs text-error">Image upload failed. Use JPG, PNG, WebP, or GIF and keep each file under 5MB after compression.</p>}
             </div>
           </Panel>
           )}

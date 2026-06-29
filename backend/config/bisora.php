@@ -9,7 +9,7 @@ return [
     'storage' => [
         'public_bucket' => env('SUPABASE_STORAGE_BUCKET_PUBLIC', 'public-storefront-media'),
         'private_bucket' => env('SUPABASE_STORAGE_BUCKET_PRIVATE', 'private-store-documents'),
-        'max_upload_mb' => (int) env('BISORA_MAX_UPLOAD_MB', 20),
+        'max_upload_mb' => (int) env('BISORA_MAX_UPLOAD_MB', 5),
     ],
 
     'plans' => [
