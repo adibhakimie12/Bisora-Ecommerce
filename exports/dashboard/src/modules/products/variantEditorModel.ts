@@ -86,6 +86,14 @@ export function splitVariantName(variantName: string) {
   return variantName.split('/').map((part) => part.trim()).filter(Boolean);
 }
 
+export function getVariantImageGroupKey(variantName: string, options: VariantOptionDraftState[]) {
+  const colorOptionIndex = options.findIndex((option) => ['color', 'colour'].includes(normalizeText(option.name)));
+  if (colorOptionIndex < 0) return variantName;
+
+  const variantParts = splitVariantName(variantName);
+  return variantParts[colorOptionIndex] || variantName;
+}
+
 function buildSwappedColorRepair(activeOptions: VariantOptionDraftState[]): VariantOptionRepair | null {
   const sharedSignature = buildSortedValueSignature(activeOptions[0]?.values ?? []);
   const sameValues = activeOptions.every((option) => buildSortedValueSignature(option.values) === sharedSignature);

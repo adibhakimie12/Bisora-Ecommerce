@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   buildVariantOptionRepair,
   findClosestVariantKey,
+  getVariantImageGroupKey,
   updateVariantOptionDraft,
 } from './variantEditorModel';
 
@@ -84,4 +85,23 @@ test('findClosestVariantKey preserves stock and images when a variant name is re
   const key = findClosestVariantKey('Pink Colour / 5', ['Pink Colour / 5 / 5', 'Brown Colour / 5 / 5']);
 
   assert.equal(key, 'Pink Colour / 5 / 5');
+});
+
+test('getVariantImageGroupKey groups color and size variants by color', () => {
+  const options = [
+    { id: 'color', name: 'Color', values: ['Red', 'Brown'], pendingValue: '' },
+    { id: 'size', name: 'Size', values: ['S', 'M'], pendingValue: '' },
+  ];
+
+  assert.equal(getVariantImageGroupKey('Red / S', options), 'Red');
+  assert.equal(getVariantImageGroupKey('Red / M', options), 'Red');
+  assert.equal(getVariantImageGroupKey('Brown / S', options), 'Brown');
+});
+
+test('getVariantImageGroupKey falls back to full variant name without color option', () => {
+  const options = [
+    { id: 'size', name: 'Size', values: ['S', 'M'], pendingValue: '' },
+  ];
+
+  assert.equal(getVariantImageGroupKey('S', options), 'S');
 });

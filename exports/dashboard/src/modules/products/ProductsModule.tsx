@@ -43,6 +43,7 @@ import { ProductStatusBadge } from './ProductStatusBadge';
 import {
   buildVariantOptionRepair,
   findClosestVariantKey,
+  getVariantImageGroupKey,
   updateVariantOptionDraft as updateVariantOptionDraftState,
 } from './variantEditorModel';
 import type { Category, CategoryDetailTab, Product, ProductTab, StockState } from './types';
@@ -1217,6 +1218,8 @@ function EditProductStudio({
     [variantOptionDrafts],
   );
   const effectiveVariantOptionDrafts = variantOptionRepair?.options ?? variantOptionDrafts;
+  const variantImageGroupKey = (variantName: string) =>
+    getVariantImageGroupKey(variantName, effectiveVariantOptionDrafts);
   const builtVariantRows = useMemo(() => {
     const activeOptions = effectiveVariantOptionDrafts.filter(
       (option) => option.name.trim() && option.values.length > 0,
@@ -1229,8 +1232,8 @@ function EditProductStudio({
         sku: getVariantDraftValue(variant.name, variantSkuMap, product.variants, (item) => item.sku, variant.sku),
         price: Number(getVariantDraftValue(variant.name, variantPriceMap, product.variants, (item) => String(item.price), String(variant.price))),
         stock: Number(getVariantDraftValue(variant.name, variantStockMap, product.variants, (item) => String(item.stock), String(variant.stock))),
-        imageUrls: getVariantImages(variant.name, variantImageMap, product.variants, product.thumbnailUrl),
-        imageUrl: firstImageUrl(getVariantImages(variant.name, variantImageMap, product.variants, product.thumbnailUrl)) ?? product.thumbnailUrl,
+        imageUrls: getVariantImages(variantImageGroupKey(variant.name), variantImageMap, product.variants, product.thumbnailUrl),
+        imageUrl: firstImageUrl(getVariantImages(variantImageGroupKey(variant.name), variantImageMap, product.variants, product.thumbnailUrl)) ?? product.thumbnailUrl,
         sortIndex: index,
       }));
     }
@@ -1263,8 +1266,8 @@ function EditProductStudio({
         sku: getVariantDraftValue(name, variantSkuMap, product.variants, (item) => item.sku, existing?.sku ?? `${safeBaseSku}-${generatedSuffix || index + 1}`),
         price: Number(getVariantDraftValue(name, variantPriceMap, product.variants, (item) => String(item.price), String(existing?.price ?? Number(form.price || product.price || 0)))),
         stock: Number(getVariantDraftValue(name, variantStockMap, product.variants, (item) => String(item.stock), String(existing?.stock ?? 0))),
-        imageUrls: getVariantImages(name, variantImageMap, product.variants, product.thumbnailUrl),
-        imageUrl: firstImageUrl(getVariantImages(name, variantImageMap, product.variants, product.thumbnailUrl)) ?? existing?.imageUrl ?? product.thumbnailUrl,
+        imageUrls: getVariantImages(variantImageGroupKey(name), variantImageMap, product.variants, product.thumbnailUrl),
+        imageUrl: firstImageUrl(getVariantImages(variantImageGroupKey(name), variantImageMap, product.variants, product.thumbnailUrl)) ?? existing?.imageUrl ?? product.thumbnailUrl,
         sortIndex: index,
       };
     });
@@ -1607,8 +1610,8 @@ function EditProductStudio({
       stock: Number(variantStockMap.get(variant.name) ?? variant.stock) || 0,
       stockState: deriveStockState(Number(variantStockMap.get(variant.name) ?? variant.stock) || 0),
       lastUpdated: 'Today',
-      imageUrls: variantImageMap.get(variant.name) ?? uniqueImageUrls([variant.imageUrl ?? '', ...(variant.imageUrls ?? []), form.thumbnailUrl]),
-      imageUrl: firstImageUrl(variantImageMap.get(variant.name)) ?? variant.imageUrl ?? form.thumbnailUrl,
+      imageUrls: uniqueImageUrls(variant.imageUrls?.length ? variant.imageUrls : [variant.imageUrl ?? '', form.thumbnailUrl]),
+      imageUrl: variant.imageUrl ?? firstImageUrl(variant.imageUrls) ?? form.thumbnailUrl,
     }));
     const numericStock = manageStock
       ? variantRows.reduce((sum, variant) => sum + Number(variant.stock || 0), 0)
@@ -1674,6 +1677,31 @@ function EditProductStudio({
 
   const selectedVariant =
     builtVariantRows.find((variant) => variant.name === selectedVariantName) ?? builtVariantRows[0];
+  const selectedVariantImageKey = selectedVariant ? variantImageGroupKey(selectedVariant.name) : '';
+  const variantImageGroups = useMemo(() => {
+    const groups = new Map<string, {
+      key: string;
+      label: string;
+      stock: number;
+      imageUrl?: string;
+      imageUrls?: string[];
+    }>();
+
+    for (const variant of builtVariantRows) {
+      const key = getVariantImageGroupKey(variant.name, effectiveVariantOptionDrafts);
+      const current = groups.get(key);
+      groups.set(key, {
+        key,
+        label: key,
+        stock: (current?.stock ?? 0) + Number(variant.stock || 0),
+        imageUrl: current?.imageUrl ?? variant.imageUrl,
+        imageUrls: uniqueImageUrls([...(current?.imageUrls ?? []), ...(variant.imageUrls ?? [])]),
+      });
+    }
+
+    return Array.from(groups.values());
+  }, [builtVariantRows, effectiveVariantOptionDrafts]);
+
   return (
     <div className="space-y-6">
       <button className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline" onClick={() => (window.location.hash = '/products')} type="button">
@@ -2289,21 +2317,21 @@ function EditProductStudio({
                         <button
                           key={imageUrl}
                           className={`relative h-16 w-16 overflow-hidden rounded border ${selectedVariant.imageUrl === imageUrl ? 'border-primary' : 'border-outline-variant/30'}`}
-                          onClick={() => setVariantMainImage(selectedVariant.name, imageUrl)}
+                          onClick={() => setVariantMainImage(selectedVariantImageKey, imageUrl)}
                           type="button"
                         >
                           <img alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" src={imageUrl} />
                           {selectedVariant.imageUrl === imageUrl && <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold text-on-primary">Main</span>}
                         </button>
                       ))}
-                      <button className="grid h-16 w-16 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant" onClick={() => onUploadMedia({ type: 'variant', variantName: selectedVariant.name })} type="button">
+                      <button className="grid h-16 w-16 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant" onClick={() => onUploadMedia({ type: 'variant', variantName: selectedVariantImageKey })} type="button">
                         +
                       </button>
                     </div>
                     <Field
                       label="Main variant image URL"
                       value={selectedVariant.imageUrl ?? form.thumbnailUrl}
-                      onChange={(value) => setVariantMainImage(selectedVariant.name, value)}
+                      onChange={(value) => setVariantMainImage(selectedVariantImageKey, value)}
                     />
                   </div>
                   <div className="space-y-3 rounded border border-outline-variant/20 p-4">
@@ -2381,37 +2409,37 @@ function EditProductStudio({
           <Panel title="Variant Images">
             <div className="space-y-4">
               <p className="text-xs text-on-surface-variant">
-                These images belong to a specific variant. Example: Pink uses pink photos, Brown uses brown photos. Click an image to make it the main image for that variant.
+                These images belong to each color group. Example: Red sizes share red photos, Brown sizes share brown photos. Click an image to make it the main image for that color.
               </p>
-              {builtVariantRows.map((variant) => {
-                const imageUrls = uniqueImageUrls(variant.imageUrls?.length ? variant.imageUrls : [variant.imageUrl ?? form.thumbnailUrl]);
+              {variantImageGroups.map((group) => {
+                const imageUrls = uniqueImageUrls(group.imageUrls?.length ? group.imageUrls : [group.imageUrl ?? form.thumbnailUrl]);
                 return (
-                <div key={variant.id} className="space-y-2 rounded border border-outline-variant/20 p-3">
+                <div key={group.key} className="space-y-2 rounded border border-outline-variant/20 p-3">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium">{variant.name}</p>
-                    <span className="text-xs text-on-surface-variant">{variant.stock} in stock</span>
+                    <p className="text-sm font-medium">{group.label}</p>
+                    <span className="text-xs text-on-surface-variant">{group.stock} in stock</span>
                   </div>
                   <div className="flex flex-wrap gap-3">
                     {imageUrls.map((imageUrl) => (
                       <div key={imageUrl} className="group relative">
                         <button
-                          className={`relative h-20 w-20 overflow-hidden rounded border ${variant.imageUrl === imageUrl ? 'border-primary' : 'border-outline-variant/30'}`}
-                          onClick={() => setVariantMainImage(variant.name, imageUrl)}
+                          className={`relative h-20 w-20 overflow-hidden rounded border ${group.imageUrl === imageUrl ? 'border-primary' : 'border-outline-variant/30'}`}
+                          onClick={() => setVariantMainImage(group.key, imageUrl)}
                           type="button"
                         >
                           <img alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" src={imageUrl} />
-                          {variant.imageUrl === imageUrl && <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold text-on-primary">Main</span>}
+                          {group.imageUrl === imageUrl && <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold text-on-primary">Main</span>}
                         </button>
                         <button
                           className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full border border-outline-variant/30 bg-surface-lowest text-on-surface-variant opacity-0 shadow group-hover:opacity-100"
-                          onClick={() => removeVariantImage(variant.name, imageUrl)}
+                          onClick={() => removeVariantImage(group.key, imageUrl)}
                           type="button"
                         >
                           <X className="h-3 w-3" />
                         </button>
                       </div>
                     ))}
-                    <button className="grid h-20 w-20 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant" onClick={() => onUploadMedia({ type: 'variant', variantName: variant.name })} type="button">
+                    <button className="grid h-20 w-20 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant" onClick={() => onUploadMedia({ type: 'variant', variantName: group.key })} type="button">
                       +
                     </button>
                   </div>
