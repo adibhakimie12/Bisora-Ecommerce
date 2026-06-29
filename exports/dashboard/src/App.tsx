@@ -9,7 +9,7 @@ import { RecentTransactions } from './components/RecentTransactions';
 import { RevenueChart } from './components/RevenueChart';
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
-import { clearStoredSession, getStoredSession, setActiveTenant } from './api/authSession';
+import { clearStoredSession, getStoredSession, setActiveTenant, type AdminSession } from './api/authSession';
 import { PublicStorefrontRuntime } from './modules/storefront/PublicStorefrontRuntime';
 import {
   CustomersModuleLazy,
@@ -26,7 +26,7 @@ import { categories } from './modules/products/data';
 import { resolveCanonicalPathFromHash, syncCanonicalUrl } from './modules/seo/canonical';
 import { useStorefrontProducts } from './modules/storefront/productStore';
 import { useStorefrontPages } from './modules/storefront/websitePagesStore';
-import { storePlanOptions, storePlanUsage } from './storePlan';
+import { buildStorePlanState } from './storePlan';
 
 type AdminRoute =
   | { module: 'Dashboard' }
@@ -128,7 +128,7 @@ export default function App() {
     }
 
     if (route.module === 'Account') {
-      return <AccountPage section={route.section} />;
+      return <AccountPage section={route.section} session={session} />;
     }
 
     return <PlaceholderPage label={route.label} />;
@@ -223,9 +223,9 @@ function PlaceholderPage({ label }: { label: string }) {
   );
 }
 
-function AccountPage({ section }: { section: 'billing' | 'store-plan' | 'profile' }) {
+function AccountPage({ section, session }: { section: 'billing' | 'store-plan' | 'profile'; session: AdminSession | null }) {
   if (section === 'store-plan') {
-    return <StorePlanPage />;
+    return <StorePlanPage session={session} />;
   }
 
   if (section === 'billing') {
@@ -235,18 +235,23 @@ function AccountPage({ section }: { section: 'billing' | 'store-plan' | 'profile
   return <MyAccountPage />;
 }
 
-function StorePlanPage() {
+function StorePlanPage({ session }: { session: AdminSession | null }) {
+  const activeTenant = session?.tenants.find((tenant) => tenant.id === session.activeTenantId) ?? session?.tenants[0];
+  const planState = buildStorePlanState(activeTenant);
+
   return (
     <div className="space-y-8">
       <section className="flex flex-col gap-2">
         <p className="text-sm font-medium text-on-surface-variant">Account / Store Plan</p>
         <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Store plan</h1>
-        <p className="text-sm text-on-surface-variant">Free trial starts here, then sellers can upgrade when they are ready.</p>
+        <p className="text-sm text-on-surface-variant">
+          {activeTenant?.freeAccess ? 'Owner-granted access is active for this store.' : 'Free trial starts here, then sellers can upgrade when they are ready.'}
+        </p>
       </section>
 
       <section className="rounded border border-outline-variant/20 bg-surface-lowest p-5">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {storePlanUsage.map(([label, value]) => (
+          {planState.usage.map(([label, value]) => (
             <div key={label} className="rounded border border-outline-variant/20 bg-surface p-4">
               <p className="text-xs uppercase tracking-wider text-on-surface-variant">{label}</p>
               <p className="mt-2 text-lg font-semibold">{value}</p>
@@ -256,7 +261,7 @@ function StorePlanPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-4">
-        {storePlanOptions.map((plan) => (
+        {planState.options.map((plan) => (
           <article
             key={plan.name}
             className={`rounded border bg-surface-lowest p-6 ${plan.active ? 'border-primary shadow-sm' : 'border-outline-variant/20'}`}

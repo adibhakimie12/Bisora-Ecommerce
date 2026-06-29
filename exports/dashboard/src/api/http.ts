@@ -25,6 +25,10 @@ export interface ApiTenant {
   name?: string;
   slug: string;
   role?: string;
+  plan?: string;
+  billing_status?: string;
+  access_status?: string;
+  free_access?: boolean;
 }
 
 export interface LoginResponse {

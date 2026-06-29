@@ -7,6 +7,10 @@ export interface AdminTenantSession {
   name?: string;
   slug: string;
   role?: string;
+  plan?: string;
+  billingStatus?: string;
+  accessStatus?: string;
+  freeAccess?: boolean;
 }
 
 export interface AdminUserSession {
@@ -76,6 +80,10 @@ export function getStoredSession(storage: ApiStorage | undefined = getDefaultSto
       name: tenant.name,
       slug: tenant.slug,
       role: tenant.role,
+      plan: tenant.plan,
+      billingStatus: tenant.billing_status,
+      accessStatus: tenant.access_status,
+      freeAccess: tenant.free_access,
     })),
   };
 }
