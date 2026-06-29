@@ -1338,6 +1338,13 @@ function EditProductStudio({
     syncDescriptionFromEditor();
     saveDescriptionSelection();
   };
+  const toggleDescriptionBold = () => {
+    focusDescriptionEditor();
+    const isBold = document.queryCommandState('bold');
+    document.execCommand(isBold ? 'removeFormat' : 'bold', false);
+    syncDescriptionFromEditor();
+    saveDescriptionSelection();
+  };
   const insertDescriptionHtml = (html: string) => {
     focusDescriptionEditor();
     document.execCommand('insertHTML', false, html);
@@ -1664,7 +1671,7 @@ function EditProductStudio({
                 <span>Description</span>
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2" ref={descriptionToolbarRef}>
-                    <ToolbarButton icon={<Bold className="h-4 w-4" />} title="Bold" onClick={() => runDescriptionCommand('bold')} />
+                    <ToolbarButton icon={<Bold className="h-4 w-4" />} title="Bold" onClick={toggleDescriptionBold} />
                     <ToolbarButton icon={<Italic className="h-4 w-4" />} title="Italic" onClick={() => runDescriptionCommand('italic')} />
                     <ToolbarButton icon={<Strikethrough className="h-4 w-4" />} title="Strikethrough" onClick={() => runDescriptionCommand('strikeThrough')} />
                     <ToolbarDropdown
