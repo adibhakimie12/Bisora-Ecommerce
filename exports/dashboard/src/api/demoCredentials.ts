@@ -44,3 +44,10 @@ export function createOfflineDemoLoginResponse(credentials: LoginCredentials): L
     ],
   };
 }
+
+export function shouldUseOfflineDemoLoginFallback(response: LoginResponse | null, error: unknown) {
+  if (!response) return false;
+  if (error instanceof Error) return true;
+
+  return Boolean(error);
+}

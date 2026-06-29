@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createOfflineDemoLoginResponse, resolveLoginCredentials } from './demoCredentials';
+import { createOfflineDemoLoginResponse, shouldUseOfflineDemoLoginFallback, resolveLoginCredentials } from './demoCredentials';
 
 function testDemoAccountsUseSeedPassword() {
   const credentials = resolveLoginCredentials({ email: 'adib.hakimi19@gmail.com', password: 'anything' });
@@ -21,8 +21,15 @@ function testOfflineDemoOwnerCanEnterSuperadminWhenBackendIsMissing() {
   assert.equal(response?.tenants[0]?.role, 'platform_owner');
 }
 
+function testOfflineDemoFallbackAcceptsApiFailures() {
+  const response = createOfflineDemoLoginResponse({ email: 'adib.hakimi19@gmail.com', password: 'anything' });
+
+  assert.equal(shouldUseOfflineDemoLoginFallback(response, new Error('API request failed')), true);
+}
+
 testDemoAccountsUseSeedPassword();
 testNormalAccountsKeepPassword();
 testOfflineDemoOwnerCanEnterSuperadminWhenBackendIsMissing();
+testOfflineDemoFallbackAcceptsApiFailures();
 
 console.log('demo credential tests passed');
