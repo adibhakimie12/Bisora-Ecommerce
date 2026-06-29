@@ -1195,6 +1195,10 @@ function EditProductStudio({
   const variantSkuMap = new Map(variantSkuDraft);
   const variantWeightMap = new Map(variantWeightDraft);
   const variantImageMap = new Map<string, string[]>(variantImageDraft);
+  const variantOptionSuggestion = useMemo(
+    () => getVariantOptionSuggestion(variantOptionDrafts),
+    [variantOptionDrafts],
+  );
   const builtVariantRows = useMemo(() => {
     const activeOptions = variantOptionDrafts.filter(
       (option) => option.name.trim() && option.values.length > 0,
@@ -1252,6 +1256,9 @@ function EditProductStudio({
     () => builtVariantRows.reduce((sum, variant) => sum + Number(variant.stock), 0),
     [builtVariantRows],
   );
+  const displayQuantity = manageStock ? totalVariantQuantity : Number(form.quantity) || 0;
+  const hasSelectedCategory = categoryOptions.some((category) => category.name === form.categoryName);
+  const displayCategoryName = hasSelectedCategory ? form.categoryName : 'Uncategorized';
 
   useEffect(() => {
     updateForm('quantity', String(totalVariantQuantity));
@@ -1309,6 +1316,16 @@ function EditProductStudio({
   };
   const removeVariantOption = (index: number) => {
     setVariantOptionDrafts((current) => current.filter((_, entryIndex) => entryIndex !== index));
+  };
+  const applyVariantOptionSuggestion = () => {
+    if (!variantOptionSuggestion) return;
+    setShowVariantBuilder(true);
+    setVariantOptionDrafts(variantOptionSuggestion.options);
+    setSelectedVariantName(
+      `${variantOptionSuggestion.colorValues[0]}${
+        variantOptionSuggestion.sharedValues.length ? ` / ${variantOptionSuggestion.sharedValues[0]}` : ''
+      }`,
+    );
   };
   const updateVariantPrice = (variantName: string, price: string) => {
     setVariantPriceDraft((current) =>
@@ -1557,7 +1574,6 @@ function EditProductStudio({
     const nextSlug = safeSlug;
     const numericPrice = Number(form.price) || 0;
     const numericCompareAt = Number(form.compareAt) || 0;
-    const numericStock = manageStock ? totalVariantQuantity : Number(form.quantity) || 0;
     const numericWeight = Number(form.weightKg) || 0;
     const selectedCategory = categoryOptions.find((category) => category.name === form.categoryName);
     const nextId =
@@ -1575,6 +1591,10 @@ function EditProductStudio({
       imageUrls: variantImageMap.get(variant.name) ?? uniqueImageUrls([variant.imageUrl ?? '', ...(variant.imageUrls ?? []), form.thumbnailUrl]),
       imageUrl: firstImageUrl(variantImageMap.get(variant.name)) ?? variant.imageUrl ?? form.thumbnailUrl,
     }));
+    const numericStock = manageStock
+      ? variantRows.reduce((sum, variant) => sum + Number(variant.stock || 0), 0)
+      : Number(form.quantity) || 0;
+    const nextCategoryName = selectedCategory?.name ?? 'Uncategorized';
     const nextRecord: Product = {
       ...product,
       id: nextId,
@@ -1586,8 +1606,8 @@ function EditProductStudio({
       stock: numericStock,
       stockState: deriveStockState(numericStock),
       sku: form.sku.trim() || `${nextSlug.toUpperCase()}-001`,
-      categoryId: selectedCategory?.id ?? product.categoryId,
-      categoryName: form.categoryName,
+      categoryId: selectedCategory?.id ?? '',
+      categoryName: nextCategoryName,
       tags: form.tags
         .split(',')
         .map((tag) => tag.trim())
@@ -2060,7 +2080,7 @@ function EditProductStudio({
                 <div>
                   <p className="text-sm font-medium">Variant options</p>
                   <p className="mt-1 text-xs text-on-surface-variant">
-                    Add size, color, material, or other option groups so stock and pricing can stay organized.
+                    Option name is the group, for example Color or Size. Add values like Pink, Brown, S, M, or 5 inside that group.
                   </p>
                 </div>
                 <button
@@ -2073,6 +2093,25 @@ function EditProductStudio({
                   {showVariantBuilder ? 'Hide options' : 'Add options'}
                 </button>
               </div>
+
+              {variantOptionSuggestion && (
+                <div className="flex flex-col gap-3 rounded border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-primary">Color setup looks swapped</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">
+                      Convert {variantOptionSuggestion.colorValues.join(', ')} into Color values and keep{' '}
+                      {variantOptionSuggestion.sharedValues.join(', ')} as Size.
+                    </p>
+                  </div>
+                  <button
+                    className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim"
+                    onClick={applyVariantOptionSuggestion}
+                    type="button"
+                  >
+                    Fix color variants
+                  </button>
+                </div>
+              )}
 
               {showVariantBuilder ? (
                 <div className="space-y-3 rounded border border-outline-variant/20 p-4">
@@ -2446,7 +2485,7 @@ function EditProductStudio({
                   )}
                 </div>
                 <p className="mt-2 text-sm text-on-surface-variant">
-                  {deriveStockState(Number(form.quantity))} · {form.quantity || '0'} units · {form.categoryName}
+                  {deriveStockState(displayQuantity)} · {displayQuantity} units · {displayCategoryName}
                 </p>
                 {hasSku && <p className="mt-1 text-xs text-on-surface-variant">SKU: {form.sku || 'NEW-SKU-001'}</p>}
                 {isPhysical && (
@@ -2501,9 +2540,9 @@ function EditProductStudio({
                 <input checked={hasSku} onChange={() => setHasSku((current) => !current)} type="checkbox" />
               </label>
               {hasSku && <Field label="SKU" value={form.sku} onChange={(value) => updateForm('sku', value)} />}
-              <Field label="Quantity Available (Auto from variants)" readOnly value={form.quantity} />
+              <Field label="Quantity Available (Auto from variants)" readOnly value={String(displayQuantity)} />
               <SummaryRow label="Inventory state">
-                <ProductStatusBadge status={deriveStockState(Number(form.quantity))} />
+                <ProductStatusBadge status={deriveStockState(displayQuantity)} />
               </SummaryRow>
               <p className="text-xs text-on-surface-variant">
                 Quantity is calculated from all variant stocks above. Update stock per size/color in the Variants table when stock management is enabled.
@@ -2551,12 +2590,18 @@ function EditProductStudio({
             <div className="space-y-4">
               <label className="block space-y-2 text-sm font-medium">
                 <span>Product Category</span>
-                <select className="w-full rounded border border-outline-variant/30 bg-surface px-3 py-2" onChange={(event) => updateForm('categoryName', event.target.value)} value={form.categoryName}>
+                <select className="w-full rounded border border-outline-variant/30 bg-surface px-3 py-2" onChange={(event) => updateForm('categoryName', event.target.value)} value={displayCategoryName}>
+                  <option>Uncategorized</option>
                   {categoryOptions.map((category) => (
                     <option key={category.id}>{category.name}</option>
                   ))}
                 </select>
               </label>
+              {categoryOptions.length === 0 && (
+                <p className="text-xs text-on-surface-variant">
+                  No live categories yet. This product can save as Uncategorized first; create categories later from Products &gt; Categories.
+                </p>
+              )}
               <Field label="Tags" value={form.tags} onChange={(value) => updateForm('tags', value)} />
               <Field label="Vendor" value={form.vendor} onChange={(value) => updateForm('vendor', value)} />
             </div>
@@ -3166,6 +3211,47 @@ function uniqueImageUrls(urls: string[]) {
 
 function firstImageUrl(urls?: string[]) {
   return uniqueImageUrls(urls ?? [])[0];
+}
+
+function getVariantOptionSuggestion(options: VariantOptionDraft[]) {
+  const activeOptions = options.filter((option) => option.name.trim() && option.values.length > 0);
+  if (activeOptions.length < 2) return null;
+
+  const sharedSignature = activeOptions[0].values.map((value) => value.trim().toLowerCase()).join('|');
+  const sameValues = activeOptions.every(
+    (option) => option.values.map((value) => value.trim().toLowerCase()).join('|') === sharedSignature,
+  );
+  if (!sameValues) return null;
+
+  const colorValues = uniqueTextValues(activeOptions.map((option) => toTitleCase(option.name)));
+  const sharedValues = uniqueTextValues(activeOptions[0].values);
+  if (colorValues.length < 2 || sharedValues.length === 0) return null;
+
+  return {
+    colorValues,
+    sharedValues,
+    options: [
+      { id: 'option-color-fixed', name: 'Color', values: colorValues, pendingValue: '' },
+      {
+        id: 'option-size-fixed',
+        name: sharedValues.every((value) => /^\d+(\.\d+)?$/.test(value)) ? 'Size' : 'Option',
+        values: sharedValues,
+        pendingValue: '',
+      },
+    ] satisfies VariantOptionDraft[],
+  };
+}
+
+function uniqueTextValues(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function toTitleCase(value: string) {
+  return value
+    .trim()
+    .split(/\s+/)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(' ');
 }
 
 function stripHtml(value: string) {
