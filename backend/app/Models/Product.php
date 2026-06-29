@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'stock',
     'status',
     'thumbnail_url',
+    'image_urls',
     'description',
     'vendor',
     'product_type',
@@ -36,6 +37,7 @@ class Product extends Model
             'price' => 'integer',
             'compare_at_price' => 'integer',
             'stock' => 'integer',
+            'image_urls' => 'array',
             'tags' => 'array',
             'variants' => 'array',
         ];

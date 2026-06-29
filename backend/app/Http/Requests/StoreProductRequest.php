@@ -41,6 +41,8 @@ class StoreProductRequest extends FormRequest
             'stock' => ['nullable', 'integer', 'min:0'],
             'status' => ['nullable', Rule::in(['active', 'draft', 'hidden', 'unpublished'])],
             'thumbnail_url' => ['nullable', 'url', 'max:2048'],
+            'image_urls' => ['nullable', 'array'],
+            'image_urls.*' => ['url', 'max:2048'],
             'description' => ['nullable', 'string', 'max:20000'],
             'vendor' => ['nullable', 'string', 'max:120'],
             'product_type' => ['nullable', 'string', 'max:120'],

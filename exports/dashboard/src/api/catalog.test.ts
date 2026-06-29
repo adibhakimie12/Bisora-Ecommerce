@@ -20,6 +20,7 @@ const apiProduct = {
   stock: 4,
   status: 'active',
   thumbnail_url: 'https://example.com/hijab.jpg',
+  image_urls: ['https://example.com/hijab.jpg', 'https://example.com/hijab-side.jpg'],
   description: 'Soft modal hijab',
   vendor: 'Bisora',
   product_type: 'Hijab',
@@ -41,6 +42,7 @@ const product: Product = {
   status: 'Active',
   stockState: 'In Stock',
   thumbnailUrl: 'https://example.com/hijab.jpg',
+  imageUrls: ['https://example.com/hijab.jpg'],
   description: 'Soft modal hijab',
   vendor: 'Bisora',
   productType: 'Hijab',
@@ -74,6 +76,7 @@ assert.equal(mappedProduct.price, 129);
 assert.equal(mappedProduct.compareAtPrice, 149);
 assert.equal(mappedProduct.stockState, 'Low Stock');
 assert.equal(mappedProduct.status, 'Active');
+assert.deepEqual(mappedProduct.imageUrls, ['https://example.com/hijab.jpg', 'https://example.com/hijab-side.jpg']);
 assert.deepEqual(mappedProduct.tags, ['modal', 'premium']);
 assert.deepEqual(mappedProduct.variants, [
   {
@@ -94,6 +97,7 @@ assert.equal(payload.price, 12900);
 assert.equal(payload.compare_at_price, 14900);
 assert.equal(payload.status, 'active');
 assert.equal(payload.thumbnail_url, 'https://example.com/hijab.jpg');
+assert.deepEqual(payload.image_urls, ['https://example.com/hijab.jpg']);
 assert.equal(payload.product_type, 'Hijab');
 assert.equal(payload.seo_title, 'Premium Modal Hijab');
 assert.deepEqual(payload.variants, product.variants);

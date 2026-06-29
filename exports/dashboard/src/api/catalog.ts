@@ -25,6 +25,7 @@ export interface ApiProduct {
   stock: number;
   status: string;
   thumbnail_url?: string | null;
+  image_urls?: string[] | null;
   description?: string | null;
   vendor?: string | null;
   product_type?: string | null;
@@ -99,6 +100,7 @@ export function mapApiProductToProduct(product: ApiProduct): Product {
     status: normalizeApiStatus(product.status),
     stockState: resolveStockState(product.stock),
     thumbnailUrl: product.thumbnail_url ?? '',
+    imageUrls: product.image_urls ?? [],
     description: product.description ?? '',
     vendor: product.vendor ?? '',
     productType: product.product_type ?? '',
@@ -154,6 +156,7 @@ export function mapProductToApiPayload(product: Product): ApiProductPayload {
     stock: product.stock,
     status: statusToApi[product.status],
     thumbnail_url: product.thumbnailUrl || null,
+    image_urls: product.imageUrls ?? [],
     description: product.description || null,
     vendor: product.vendor || null,
     product_type: product.productType || null,

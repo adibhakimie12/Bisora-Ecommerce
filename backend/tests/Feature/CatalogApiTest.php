@@ -201,12 +201,15 @@ class CatalogApiTest extends TestCase
                 'price' => 12900,
                 'stock' => 14,
                 'status' => 'active',
+                'thumbnail_url' => 'https://example.test/main.jpg',
+                'image_urls' => ['https://example.test/main.jpg', 'https://example.test/side.jpg'],
                 'tags' => ['modal', 'premium'],
                 'variants' => [['name' => 'Rose', 'stock' => 4]],
                 'seo_title' => 'Premium Modal Hijab',
             ])
             ->assertCreated()
             ->assertJsonPath('data.title', 'Premium Modal Hijab')
+            ->assertJsonPath('data.image_urls.1', 'https://example.test/side.jpg')
             ->assertJsonPath('data.category.slug', 'hijab');
 
         $productId = $createResponse->json('data.id');
@@ -221,9 +224,11 @@ class CatalogApiTest extends TestCase
                 'price' => 13900,
                 'stock' => 10,
                 'status' => 'active',
+                'image_urls' => ['https://example.test/updated.jpg'],
             ])
             ->assertOk()
             ->assertJsonPath('data.title', 'Premium Modal Hijab Updated')
+            ->assertJsonPath('data.image_urls.0', 'https://example.test/updated.jpg')
             ->assertJsonPath('data.price', 13900);
 
         $this->actingAs($user, 'sanctum')

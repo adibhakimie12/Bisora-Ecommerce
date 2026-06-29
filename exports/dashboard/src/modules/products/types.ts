@@ -17,6 +17,7 @@ export interface Product {
   status: ProductStatus;
   stockState: StockState;
   thumbnailUrl: string;
+  imageUrls?: string[];
   description: string;
   vendor: string;
   productType: string;

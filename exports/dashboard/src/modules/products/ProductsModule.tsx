@@ -530,7 +530,7 @@ function ProductsTable({
                   </button>
                 </td>
                 <td className="px-4 py-4 text-sm text-on-surface-variant">{product.categoryName}</td>
-                <td className="px-4 py-4 text-sm font-semibold">${product.price.toLocaleString()}</td>
+                <td className="px-4 py-4 text-sm font-semibold">{formatCurrency(product.price)}</td>
                 <td className="px-4 py-4">
                   <div className="space-y-1">
                     <p className="text-sm font-medium">{product.stock} in stock</p>
@@ -1106,6 +1106,7 @@ function EditProductStudio({
     tags: product.tags.join(', '),
     vendor: product.vendor,
     thumbnailUrl: product.thumbnailUrl,
+    imageUrls: product.imageUrls?.length ? product.imageUrls : product.thumbnailUrl ? [product.thumbnailUrl] : [],
     slug: product.slug,
     seoTitle: product.seoTitle,
     seoDescription: product.seoDescription,
@@ -1442,29 +1443,40 @@ function EditProductStudio({
         : [...current, [variantName, imageUrl] as const],
     );
   };
-  const handleMediaFileChange = async (file?: File) => {
-    if (!file || mediaUploadStatus === 'uploading') {
+  const handleMediaFileChange = async (files?: FileList | null) => {
+    const selectedFiles = Array.from(files ?? []);
+    if (selectedFiles.length === 0 || mediaUploadStatus === 'uploading') {
       return;
     }
 
     setMediaUploadStatus('uploading');
 
     try {
-      const uploaded = await uploadMediaFile(file, {
-        ownerType: 'product',
-        ownerId: /^\d+$/.test(product.id) ? product.id : undefined,
-      });
+      const uploadedFiles = await Promise.all(
+        selectedFiles.map((file) =>
+          uploadMediaFile(file, {
+            ownerType: 'product',
+            ownerId: /^\d+$/.test(product.id) ? product.id : undefined,
+          }),
+        ),
+      );
+      const publicUrls = uploadedFiles.map((file) => file.publicUrl).filter((url): url is string => Boolean(url));
 
-      if (!uploaded.publicUrl) {
+      if (publicUrls.length === 0) {
         throw new Error('Uploaded media did not return a public URL.');
       }
 
+      const firstUrl = publicUrls[0];
       if (mediaUploadTarget.type === 'variant') {
-        updateVariantImage(mediaUploadTarget.variantName, uploaded.publicUrl);
+        updateVariantImage(mediaUploadTarget.variantName, firstUrl);
       } else {
-        updateForm('thumbnailUrl', uploaded.publicUrl);
+        setForm((current) => ({
+          ...current,
+          thumbnailUrl: firstUrl,
+          imageUrls: uniqueImageUrls([...current.imageUrls, ...publicUrls]),
+        }));
       }
-      setPendingImageUrl(uploaded.publicUrl);
+      setPendingImageUrl(firstUrl);
       setMediaUploadStatus('idle');
     } catch {
       setMediaUploadStatus('error');
@@ -1530,7 +1542,8 @@ function EditProductStudio({
         .map((tag) => tag.trim())
         .filter(Boolean),
       vendor: form.vendor.trim() || 'Bisora',
-      thumbnailUrl: form.thumbnailUrl,
+      thumbnailUrl: form.thumbnailUrl || form.imageUrls[0] || '',
+      imageUrls: uniqueImageUrls(form.imageUrls.length > 0 ? form.imageUrls : [form.thumbnailUrl]),
       slug: nextSlug,
       seoTitle: generatedSeoTitle,
       seoDescription: generatedSeoDescription,
@@ -1928,7 +1941,10 @@ function EditProductStudio({
                       ref={descriptionRef}
                       className="min-h-40 w-full rounded border border-outline-variant/30 bg-surface-low px-3 py-2 outline-none"
                       contentEditable
-                      onBlur={saveDescriptionSelection}
+                      onBlur={() => {
+                        syncDescriptionFromEditor();
+                        saveDescriptionSelection();
+                      }}
                       onInput={syncDescriptionFromEditor}
                       onKeyUp={saveDescriptionSelection}
                       onMouseUp={saveDescriptionSelection}
@@ -1954,11 +1970,25 @@ function EditProductStudio({
                 ref={mediaInputRef}
                 accept="image/jpeg,image/png,image/webp,image/gif"
                 className="hidden"
-                onChange={(event) => void handleMediaFileChange(event.target.files?.[0])}
+                multiple
+                onChange={(event) => {
+                  void handleMediaFileChange(event.target.files);
+                  event.currentTarget.value = '';
+                }}
                 type="file"
               />
               <div className="grid gap-3 sm:grid-cols-4">
-              <img alt="" className="h-32 w-full rounded object-cover" referrerPolicy="no-referrer" src={form.thumbnailUrl} />
+              {uniqueImageUrls(form.imageUrls.length ? form.imageUrls : [form.thumbnailUrl]).map((imageUrl, index) => (
+                <button
+                  key={`${imageUrl}-${index}`}
+                  className={`relative h-32 overflow-hidden rounded border ${form.thumbnailUrl === imageUrl ? 'border-primary' : 'border-outline-variant/20'}`}
+                  onClick={() => updateForm('thumbnailUrl', imageUrl)}
+                  type="button"
+                >
+                  <img alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" src={imageUrl} />
+                  {form.thumbnailUrl === imageUrl && <span className="absolute left-2 top-2 rounded bg-primary px-2 py-1 text-[10px] font-semibold text-on-primary">Main</span>}
+                </button>
+              ))}
               <button className="grid h-32 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-60" disabled={mediaUploadStatus === 'uploading'} onClick={() => onUploadMedia()} type="button">
                 <span className="flex items-center gap-2"><ImagePlus className="h-4 w-4" /> {mediaUploadStatus === 'uploading' ? 'Uploading...' : 'Add Images'}</span>
               </button>
@@ -2079,7 +2109,7 @@ function EditProductStudio({
                       >
                         <td className="px-4 py-3 text-sm font-medium">{variant.name}</td>
                         {hasSku && <td className="px-4 py-3 font-mono text-sm">{variant.sku}</td>}
-                        <td className="px-4 py-3 text-sm">${variant.price.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-sm">{formatCurrency(variant.price)}</td>
                         <td className="px-4 py-3">
                           <div className="inline-flex items-center rounded border border-outline-variant/30">
                             <button
@@ -2311,15 +2341,16 @@ function EditProductStudio({
                   </div>
                   <ProductStatusBadge status={form.status as Product['status']} />
                 </div>
-                <p className="text-sm text-on-surface-variant line-clamp-3">
-                  {form.description || 'Product description preview will appear here as you type.'}
-                </p>
+                <div
+                  className="prose prose-sm max-w-none text-on-surface-variant line-clamp-3"
+                  dangerouslySetInnerHTML={{ __html: form.description || 'Product description preview will appear here as you type.' }}
+                />
               </div>
               <div className="rounded bg-surface-low p-3">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-xl font-semibold">${formatMoney(form.price)}</span>
+                  <span className="text-xl font-semibold">{formatCurrency(Number(form.price) || 0)}</span>
                   {!!Number(form.compareAt) && Number(form.compareAt) > Number(form.price || 0) && (
-                    <span className="text-sm text-on-surface-variant line-through">${formatMoney(form.compareAt)}</span>
+                    <span className="text-sm text-on-surface-variant line-through">{formatCurrency(Number(form.compareAt) || 0)}</span>
                   )}
                 </div>
                 <p className="mt-2 text-sm text-on-surface-variant">
@@ -2701,7 +2732,7 @@ function CategoryProductsTab({
                 <p className="text-xs text-on-surface-variant">{product.sku}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-semibold">${product.price.toLocaleString()}</p>
+                <p className="text-sm font-semibold">{formatCurrency(product.price)}</p>
                 <p className="text-xs text-on-surface-variant">{product.stock} in stock</p>
               </div>
               <button className="grid h-8 w-8 place-items-center rounded text-on-surface-variant hover:bg-surface-low" onClick={() => onRemoveProduct(product)} type="button">
@@ -3011,10 +3042,14 @@ function deriveStockState(quantity: number): StockState {
   return 'In Stock';
 }
 
-function formatMoney(value: string) {
+function formatCurrency(value: string | number) {
   const numeric = Number(value);
-  if (Number.isNaN(numeric)) return '0.00';
-  return numeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const amount = Number.isFinite(numeric) ? numeric : 0;
+  return `RM ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function uniqueImageUrls(urls: string[]) {
+  return Array.from(new Set(urls.map((url) => url.trim()).filter(Boolean)));
 }
 
 function stripHtml(value: string) {

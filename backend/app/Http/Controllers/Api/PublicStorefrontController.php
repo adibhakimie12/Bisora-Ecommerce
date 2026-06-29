@@ -209,6 +209,7 @@ class PublicStorefrontController extends Controller
             'compare_at_price' => $product->compare_at_price,
             'stock' => $product->stock,
             'thumbnail_url' => $product->thumbnail_url,
+            'image_urls' => $product->image_urls ?? [],
             'description' => $product->description,
             'vendor' => $product->vendor,
             'product_type' => $product->product_type,

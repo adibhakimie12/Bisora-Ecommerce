@@ -52,6 +52,7 @@ export interface ApiProductPayload {
   stock?: number;
   status?: 'active' | 'draft' | 'hidden' | 'unpublished';
   thumbnail_url?: string | null;
+  image_urls?: string[];
   description?: string | null;
   vendor?: string | null;
   product_type?: string | null;
