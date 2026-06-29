@@ -1688,7 +1688,7 @@ function EditProductStudio({
           <p className="mt-2 text-sm text-on-surface-variant">
             {isNewProduct
               ? 'Start with the core product details first. Save the product, then open deeper variant and tab-level setup.'
-              : `${product.productType} product workspace for catalog, media, inventory, and SEO.`}
+              : 'Product workspace for catalog, media, inventory, shipping, categories, and SEO.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -1728,23 +1728,22 @@ function EditProductStudio({
           <section className="rounded border border-outline-variant/20 bg-surface-lowest p-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded border border-success/20 bg-success/5 p-4">
-                <p className="text-sm font-semibold text-success">Works now in editor</p>
+                <p className="text-sm font-semibold text-success">Live editor controls</p>
                 <p className="mt-2 text-xs text-on-surface-variant">
-                  Text formatting, lists, headings, tables, links, alignment, color, size, variant rows, stock-by-variant,
-                  and shipping fields already work in the current mock editor flow.
+                  Product text, gallery images, variant rows, variant images, stock-by-variant, pricing, shipping basics,
+                  categories, and SEO fields save through the live product flow.
                 </p>
               </div>
               <div className="rounded border border-outline-variant/20 bg-surface-low p-4">
-                <p className="text-sm font-semibold">Backend phase later</p>
+                <p className="text-sm font-semibold">External integrations later</p>
                 <p className="mt-2 text-xs text-on-surface-variant">
-                  Real media storage, permanent asset upload, provider delivery, inventory logs, and database save logic
-                  will become fully real once backend and storage are connected.
+                  Courier rates, provider waybills, payment settlement, and inventory history logs will connect as the next backend integrations.
                 </p>
               </div>
             </div>
           </section>
 
-          {(isNewProduct || activeEditorTab === 'Item' || activeEditorTab === 'Images') && (
+          {(isNewProduct || activeEditorTab === 'Item') && (
           <Panel title="Basic Information">
             <div className="space-y-4">
               <Field label="Product name" value={form.title} onChange={(value) => updateForm('title', value)} />
@@ -2055,6 +2054,12 @@ function EditProductStudio({
           {(isNewProduct || activeEditorTab === 'Item' || activeEditorTab === 'Images') && (
           <Panel title="Media">
             <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium">Product gallery</p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  These images represent the product generally. The image marked Main is used for product cards, search, and default storefront preview.
+                </p>
+              </div>
               <p className="text-xs text-on-surface-variant">
                 Upload product images into storage. Large JPG, PNG, and WebP files are compressed before upload, with a 5MB safety limit.
               </p>
@@ -2273,7 +2278,7 @@ function EditProductStudio({
           </Panel>
           )}
 
-          {(!isNewProduct && (activeEditorTab === 'Variants' || activeEditorTab === 'Images')) && selectedVariant && (
+          {(!isNewProduct && activeEditorTab === 'Variants') && selectedVariant && (
           <Panel title="Variant Detail">
             <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
               <div className="space-y-2 rounded border border-outline-variant/20 bg-surface-low p-3">
@@ -2392,7 +2397,7 @@ function EditProductStudio({
           <Panel title="Variant Images">
             <div className="space-y-4">
               <p className="text-xs text-on-surface-variant">
-                Assign one or more images to each variant. Click an image to make it the main image for that variant.
+                These images belong to a specific variant. Example: Pink uses pink photos, Brown uses brown photos. Click an image to make it the main image for that variant.
               </p>
               {builtVariantRows.map((variant) => {
                 const imageUrls = uniqueImageUrls(variant.imageUrls?.length ? variant.imageUrls : [variant.imageUrl ?? form.thumbnailUrl]);
@@ -2429,6 +2434,81 @@ function EditProductStudio({
                 </div>
                 );
               })}
+            </div>
+          </Panel>
+          )}
+
+          {(!isNewProduct && activeEditorTab === 'Shipping') && (
+          <Panel title="Shipping Setup">
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="space-y-4">
+                <label className="flex items-center justify-between rounded border border-outline-variant/20 p-3 text-sm">
+                  <span>This is a physical product</span>
+                  <input checked={isPhysical} onChange={() => setIsPhysical((current) => !current)} type="checkbox" />
+                </label>
+                {isPhysical ? (
+                  <>
+                    <Field label="Weight (kg)" value={form.weightKg} onChange={(value) => updateForm('weightKg', value)} />
+                    <label className="block space-y-2 text-sm font-medium">
+                      <span>Package profile</span>
+                      <select
+                        className="w-full rounded border border-outline-variant/30 bg-surface px-3 py-2"
+                        onChange={(event) => updateForm('packageProfile', event.target.value)}
+                        value={form.packageProfile}
+                      >
+                        <option>Pouch</option>
+                        <option>Box</option>
+                        <option>Large Box</option>
+                      </select>
+                    </label>
+                  </>
+                ) : (
+                  <p className="rounded border border-outline-variant/20 bg-surface-low p-4 text-sm text-on-surface-variant">
+                    Digital or service products do not need packing weight, courier, or package profile.
+                  </p>
+                )}
+              </div>
+              <div className="rounded border border-outline-variant/20 bg-surface-low p-4">
+                <p className="text-sm font-semibold">Courier integration status</p>
+                <p className="mt-2 text-sm text-on-surface-variant">
+                  Basic shipping fields save now. Courier rate API, waybill creation, and fulfillment automation will be wired in the shipping integration phase.
+                </p>
+              </div>
+            </div>
+          </Panel>
+          )}
+
+          {(!isNewProduct && activeEditorTab === 'Categories') && (
+          <Panel title="Category & Organization">
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="space-y-4">
+                <label className="block space-y-2 text-sm font-medium">
+                  <span>Product Category</span>
+                  <select className="w-full rounded border border-outline-variant/30 bg-surface px-3 py-2" onChange={(event) => updateForm('categoryName', event.target.value)} value={displayCategoryName}>
+                    <option>Uncategorized</option>
+                    {categoryOptions.map((category) => (
+                      <option key={category.id}>{category.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <Field label="Tags" value={form.tags} onChange={(value) => updateForm('tags', value)} />
+                <Field label="Vendor" value={form.vendor} onChange={(value) => updateForm('vendor', value)} />
+              </div>
+              <div className="rounded border border-outline-variant/20 bg-surface-low p-4">
+                <p className="text-sm font-semibold">{categoryOptions.length === 0 ? 'No categories yet' : `${categoryOptions.length} categories available`}</p>
+                <p className="mt-2 text-sm text-on-surface-variant">
+                  {categoryOptions.length === 0
+                    ? 'Save this product as Uncategorized first, then create collections from Products > Categories.'
+                    : 'Choose one category here so storefront collection pages and filters can group this product correctly.'}
+                </p>
+                <button
+                  className="mt-4 rounded border border-outline-variant/30 px-3 py-2 text-sm hover:bg-surface-lowest"
+                  onClick={() => (window.location.hash = '/products/categories')}
+                  type="button"
+                >
+                  Open Categories
+                </button>
+              </div>
             </div>
           </Panel>
           )}
@@ -2569,7 +2649,7 @@ function EditProductStudio({
             </div>
           </Panel>
 
-          {(isNewProduct || activeEditorTab === 'Item' || activeEditorTab === 'Shipping') && (
+          {(isNewProduct || activeEditorTab === 'Item') && (
           <Panel title="Shipping">
             <div className="space-y-4">
               <label className="flex items-center justify-between rounded border border-outline-variant/20 p-3 text-sm">
@@ -2604,7 +2684,7 @@ function EditProductStudio({
           </Panel>
           )}
 
-          {(isNewProduct || activeEditorTab === 'Item' || activeEditorTab === 'Categories') && (
+          {(isNewProduct || activeEditorTab === 'Item') && (
           <Panel title="Organization">
             <div className="space-y-4">
               <label className="block space-y-2 text-sm font-medium">
