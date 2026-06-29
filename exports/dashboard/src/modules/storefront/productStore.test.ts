@@ -97,18 +97,18 @@ test('loadProducts does not show bundled demo products for authenticated tenant 
   assert.deepEqual(loadProducts(), []);
 });
 
-test('loadProducts ignores stale local product cache for authenticated tenant sessions', () => {
+test('loadProducts uses cached live products for authenticated tenant sessions while API refreshes', () => {
   const storage = new FakeStorage();
   storage.setItem('bisora.apiToken', 'token-123');
   storage.setItem('bisora.tenantId', '77');
-  storage.setItem('bisora-storefront-products', JSON.stringify([createProduct('Stale Demo Cache')]));
+  storage.setItem('bisora-storefront-products', JSON.stringify([createProduct('Cached Live Product')]));
   globalThis.window = {
     localStorage: storage,
     addEventListener: () => {},
     removeEventListener: () => {},
   } as unknown as Window & typeof globalThis;
 
-  assert.deepEqual(loadProducts(), []);
+  assert.equal(loadProducts()[0]?.title, 'Cached Live Product');
 });
 
 test('syncProductsFromApi hydrates shared snapshot when backend credentials exist', async () => {

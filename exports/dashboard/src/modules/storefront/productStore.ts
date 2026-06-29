@@ -51,11 +51,19 @@ function readProductsFromStorage(): Product[] {
     return products;
   }
 
+  const saved = window.localStorage.getItem(PRODUCT_STORAGE_KEY);
   if (!shouldUseDemoData()) {
-    return [];
+    if (!saved) {
+      return [];
+    }
+
+    try {
+      return JSON.parse(saved) as Product[];
+    } catch {
+      return [];
+    }
   }
 
-  const saved = window.localStorage.getItem(PRODUCT_STORAGE_KEY);
   if (!saved) {
     return products;
   }

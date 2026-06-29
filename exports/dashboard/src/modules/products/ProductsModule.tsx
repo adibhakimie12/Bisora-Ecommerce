@@ -40,7 +40,11 @@ import { uploadMediaFile } from '../../api/media';
 import { ApiError } from '../../api/http';
 import { shouldUseDemoData } from '../../liveDataMode';
 import { ProductStatusBadge } from './ProductStatusBadge';
-import { updateVariantOptionDraft as updateVariantOptionDraftState } from './variantEditorModel';
+import {
+  buildVariantOptionRepair,
+  findClosestVariantKey,
+  updateVariantOptionDraft as updateVariantOptionDraftState,
+} from './variantEditorModel';
 import type { Category, CategoryDetailTab, Product, ProductTab, StockState } from './types';
 
 interface ProductsModuleProps {
@@ -501,10 +505,20 @@ function ProductsTable({
   onArchive: (product: Product) => void;
   onDelete: (product: Product) => void;
 }) {
-  const [activeMenuProductId, setActiveMenuProductId] = useState<string | null>(null);
+  const [actionMenu, setActionMenu] = useState<{ productId: string; x: number; y: number } | null>(null);
+  const activeMenuProduct = products.find((product) => product.id === actionMenu?.productId);
+  const closeActionMenu = () => setActionMenu(null);
+  const openActionMenu = (product: Product, event: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setActionMenu((current) =>
+      current?.productId === product.id
+        ? null
+        : { productId: product.id, x: rect.right, y: rect.bottom },
+    );
+  };
 
   return (
-    <section className="overflow-hidden rounded border border-outline-variant/20 bg-surface-lowest">
+    <section className="relative rounded border border-outline-variant/20 bg-surface-lowest">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] text-left">
           <thead className="bg-surface-low text-xs uppercase tracking-wider text-on-surface-variant">
@@ -552,17 +566,9 @@ function ProductsTable({
                     <button className="rounded border border-error/30 px-3 py-1.5 text-xs text-error hover:bg-error/5" onClick={() => onDelete(product)} type="button">
                       Delete
                     </button>
-                    <button className="grid h-8 w-8 place-items-center rounded text-on-surface-variant hover:bg-surface-low hover:text-primary" onClick={() => setActiveMenuProductId((current) => (current === product.id ? null : product.id))} type="button">
+                    <button className="grid h-8 w-8 place-items-center rounded text-on-surface-variant hover:bg-surface-low hover:text-primary" onClick={(event) => openActionMenu(product, event)} type="button">
                       <MoreHorizontal className="h-4 w-4" />
                     </button>
-                    {activeMenuProductId === product.id && (
-                      <div className="absolute right-6 top-12 z-10 min-w-40 rounded border border-outline-variant/20 bg-surface-lowest p-1 shadow-lg">
-                        <button className="block w-full rounded px-3 py-2 text-left text-xs hover:bg-surface-low" onClick={() => (window.location.hash = `/products/edit/${product.id}`)} type="button">Quick Edit</button>
-                        <button className="block w-full rounded px-3 py-2 text-left text-xs hover:bg-surface-low" onClick={() => onDuplicate(product)} type="button">Duplicate Product</button>
-                        <button className="block w-full rounded px-3 py-2 text-left text-xs hover:bg-surface-low" onClick={() => onArchive(product)} type="button">Move to Hidden</button>
-                        <button className="block w-full rounded px-3 py-2 text-left text-xs text-error hover:bg-error/5" onClick={() => onDelete(product)} type="button">Delete Product</button>
-                      </div>
-                    )}
                   </div>
                 </td>
               </tr>
@@ -570,6 +576,17 @@ function ProductsTable({
           </tbody>
         </table>
       </div>
+      {activeMenuProduct && actionMenu && (
+        <div
+          className="fixed z-50 min-w-44 rounded border border-outline-variant/20 bg-surface-lowest p-1 text-left shadow-lg"
+          style={{ left: Math.max(12, actionMenu.x - 176), top: actionMenu.y + 8 }}
+        >
+          <button className="block w-full rounded px-3 py-2 text-left text-xs hover:bg-surface-low" onClick={() => { closeActionMenu(); window.location.hash = `/products/edit/${activeMenuProduct.id}`; }} type="button">Quick Edit</button>
+          <button className="block w-full rounded px-3 py-2 text-left text-xs hover:bg-surface-low" onClick={() => { closeActionMenu(); onDuplicate(activeMenuProduct); }} type="button">Duplicate Product</button>
+          <button className="block w-full rounded px-3 py-2 text-left text-xs hover:bg-surface-low" onClick={() => { closeActionMenu(); onArchive(activeMenuProduct); }} type="button">Move to Hidden</button>
+          <button className="block w-full rounded px-3 py-2 text-left text-xs text-error hover:bg-error/5" onClick={() => { closeActionMenu(); onDelete(activeMenuProduct); }} type="button">Delete Product</button>
+        </div>
+      )}
     </section>
   );
 }
@@ -1195,8 +1212,8 @@ function EditProductStudio({
   const variantSkuMap = new Map(variantSkuDraft);
   const variantWeightMap = new Map(variantWeightDraft);
   const variantImageMap = new Map<string, string[]>(variantImageDraft);
-  const variantOptionSuggestion = useMemo(
-    () => getVariantOptionSuggestion(variantOptionDrafts),
+  const variantOptionRepair = useMemo(
+    () => buildVariantOptionRepair(variantOptionDrafts),
     [variantOptionDrafts],
   );
   const builtVariantRows = useMemo(() => {
@@ -1208,11 +1225,11 @@ function EditProductStudio({
       return product.variants.map((variant, index) => ({
         id: variant.id,
         name: variant.name,
-        sku: variantSkuMap.get(variant.name) ?? variant.sku,
-        price: Number(variantPriceMap.get(variant.name) ?? variant.price),
-        stock: Number(variantStockMap.get(variant.name) ?? variant.stock),
-        imageUrls: variantImageMap.get(variant.name) ?? uniqueImageUrls([variant.imageUrl ?? '', ...(variant.imageUrls ?? []), product.thumbnailUrl]),
-        imageUrl: firstImageUrl(variantImageMap.get(variant.name)) ?? variant.imageUrl ?? product.thumbnailUrl,
+        sku: getVariantDraftValue(variant.name, variantSkuMap, product.variants, (item) => item.sku, variant.sku),
+        price: Number(getVariantDraftValue(variant.name, variantPriceMap, product.variants, (item) => String(item.price), String(variant.price))),
+        stock: Number(getVariantDraftValue(variant.name, variantStockMap, product.variants, (item) => String(item.stock), String(variant.stock))),
+        imageUrls: getVariantImages(variant.name, variantImageMap, product.variants, product.thumbnailUrl),
+        imageUrl: firstImageUrl(getVariantImages(variant.name, variantImageMap, product.variants, product.thumbnailUrl)) ?? product.thumbnailUrl,
         sortIndex: index,
       }));
     }
@@ -1242,11 +1259,11 @@ function EditProductStudio({
       return {
         id: existing?.id ?? `generated-${index}-${generatedSuffix || 'VAR'}`,
         name,
-        sku: variantSkuMap.get(name) ?? existing?.sku ?? `${safeBaseSku}-${generatedSuffix || index + 1}`,
-        price: Number(variantPriceMap.get(name) ?? existing?.price ?? Number(form.price || product.price || 0)),
-        stock: Number(variantStockMap.get(name) ?? existing?.stock ?? 0),
-        imageUrls: variantImageMap.get(name) ?? uniqueImageUrls([existing?.imageUrl ?? '', ...(existing?.imageUrls ?? []), product.thumbnailUrl]),
-        imageUrl: firstImageUrl(variantImageMap.get(name)) ?? existing?.imageUrl ?? product.thumbnailUrl,
+        sku: getVariantDraftValue(name, variantSkuMap, product.variants, (item) => item.sku, existing?.sku ?? `${safeBaseSku}-${generatedSuffix || index + 1}`),
+        price: Number(getVariantDraftValue(name, variantPriceMap, product.variants, (item) => String(item.price), String(existing?.price ?? Number(form.price || product.price || 0)))),
+        stock: Number(getVariantDraftValue(name, variantStockMap, product.variants, (item) => String(item.stock), String(existing?.stock ?? 0))),
+        imageUrls: getVariantImages(name, variantImageMap, product.variants, product.thumbnailUrl),
+        imageUrl: firstImageUrl(getVariantImages(name, variantImageMap, product.variants, product.thumbnailUrl)) ?? existing?.imageUrl ?? product.thumbnailUrl,
         sortIndex: index,
       };
     });
@@ -1317,13 +1334,13 @@ function EditProductStudio({
   const removeVariantOption = (index: number) => {
     setVariantOptionDrafts((current) => current.filter((_, entryIndex) => entryIndex !== index));
   };
-  const applyVariantOptionSuggestion = () => {
-    if (!variantOptionSuggestion) return;
+  const applyVariantOptionRepair = () => {
+    if (!variantOptionRepair) return;
     setShowVariantBuilder(true);
-    setVariantOptionDrafts(variantOptionSuggestion.options);
+    setVariantOptionDrafts(variantOptionRepair.options);
     setSelectedVariantName(
-      `${variantOptionSuggestion.colorValues[0]}${
-        variantOptionSuggestion.sharedValues.length ? ` / ${variantOptionSuggestion.sharedValues[0]}` : ''
+      `${variantOptionRepair.colorValues[0]}${
+        variantOptionRepair.sharedValues.length ? ` / ${variantOptionRepair.sharedValues[0]}` : ''
       }`,
     );
   };
@@ -2094,21 +2111,20 @@ function EditProductStudio({
                 </button>
               </div>
 
-              {variantOptionSuggestion && (
+              {variantOptionRepair && (
                 <div className="flex flex-col gap-3 rounded border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-primary">Color setup looks swapped</p>
+                    <p className="text-sm font-semibold text-primary">{variantOptionRepair.title}</p>
                     <p className="mt-1 text-xs text-on-surface-variant">
-                      Convert {variantOptionSuggestion.colorValues.join(', ')} into Color values and keep{' '}
-                      {variantOptionSuggestion.sharedValues.join(', ')} as Size.
+                      {variantOptionRepair.description}
                     </p>
                   </div>
                   <button
                     className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim"
-                    onClick={applyVariantOptionSuggestion}
+                    onClick={applyVariantOptionRepair}
                     type="button"
                   >
-                    Fix color variants
+                    {variantOptionRepair.actionLabel}
                   </button>
                 </div>
               )}
@@ -2133,6 +2149,9 @@ function EditProductStudio({
                       </div>
 
                       <div className="flex flex-wrap gap-2">
+                        <p className="w-full text-xs font-medium uppercase tracking-wide text-on-surface-variant">
+                          Option values, not stock quantity
+                        </p>
                         {option.values.map((value) => (
                           <button
                             key={value}
@@ -2153,7 +2172,7 @@ function EditProductStudio({
                         <input
                           className="h-10 flex-1 rounded border border-outline-variant/30 bg-surface px-3 text-sm outline-none focus:border-primary"
                           onChange={(event) => updateVariantOptionDraft(optionIndex, 'pendingValue', event.target.value)}
-                          placeholder="Add another value"
+                          placeholder={option.name.toLowerCase().includes('color') || option.name.toLowerCase().includes('colour') ? 'Add color value, e.g. Red' : 'Add value, e.g. M or 5'}
                           value={option.pendingValue}
                         />
                         <button
@@ -2190,7 +2209,7 @@ function EditProductStudio({
                       <th className="px-4 py-3">Variant</th>
                       {hasSku && <th className="px-4 py-3">SKU</th>}
                       <th className="px-4 py-3">Price</th>
-                      <th className="px-4 py-3">Stock</th>
+                      <th className="px-4 py-3">Stock quantity</th>
                       <th className="px-4 py-3">Status</th>
                     </tr>
                   </thead>
@@ -2248,7 +2267,7 @@ function EditProductStudio({
                 </table>
               </div>
               <p className="text-xs text-on-surface-variant">
-                Weight and package profile below are used later by shipping, courier routing, and waybill payloads.
+                Stock is the number field above. Option values only create choices like Color and Size.
               </p>
             </div>
           </Panel>
@@ -3213,45 +3232,37 @@ function firstImageUrl(urls?: string[]) {
   return uniqueImageUrls(urls ?? [])[0];
 }
 
-function getVariantOptionSuggestion(options: VariantOptionDraft[]) {
-  const activeOptions = options.filter((option) => option.name.trim() && option.values.length > 0);
-  if (activeOptions.length < 2) return null;
+function getVariantDraftValue<T>(
+  variantName: string,
+  draftMap: Map<string, T>,
+  existingVariants: Product['variants'],
+  getExistingValue: (variant: Product['variants'][number]) => T | undefined,
+  fallback: T,
+) {
+  if (draftMap.has(variantName)) return draftMap.get(variantName) ?? fallback;
 
-  const sharedSignature = activeOptions[0].values.map((value) => value.trim().toLowerCase()).join('|');
-  const sameValues = activeOptions.every(
-    (option) => option.values.map((value) => value.trim().toLowerCase()).join('|') === sharedSignature,
+  const closestDraftKey = findClosestVariantKey(variantName, Array.from(draftMap.keys()));
+  if (closestDraftKey && draftMap.has(closestDraftKey)) return draftMap.get(closestDraftKey) ?? fallback;
+
+  const closestVariantKey = findClosestVariantKey(variantName, existingVariants.map((variant) => variant.name));
+  const closestVariant = existingVariants.find((variant) => variant.name === closestVariantKey);
+  return closestVariant ? getExistingValue(closestVariant) ?? fallback : fallback;
+}
+
+function getVariantImages(
+  variantName: string,
+  draftMap: Map<string, string[]>,
+  existingVariants: Product['variants'],
+  fallbackImageUrl: string,
+) {
+  const draftImages = getVariantDraftValue(
+    variantName,
+    draftMap,
+    existingVariants,
+    (variant) => uniqueImageUrls([variant.imageUrl ?? '', ...(variant.imageUrls ?? [])]),
+    [],
   );
-  if (!sameValues) return null;
-
-  const colorValues = uniqueTextValues(activeOptions.map((option) => toTitleCase(option.name)));
-  const sharedValues = uniqueTextValues(activeOptions[0].values);
-  if (colorValues.length < 2 || sharedValues.length === 0) return null;
-
-  return {
-    colorValues,
-    sharedValues,
-    options: [
-      { id: 'option-color-fixed', name: 'Color', values: colorValues, pendingValue: '' },
-      {
-        id: 'option-size-fixed',
-        name: sharedValues.every((value) => /^\d+(\.\d+)?$/.test(value)) ? 'Size' : 'Option',
-        values: sharedValues,
-        pendingValue: '',
-      },
-    ] satisfies VariantOptionDraft[],
-  };
-}
-
-function uniqueTextValues(values: string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
-}
-
-function toTitleCase(value: string) {
-  return value
-    .trim()
-    .split(/\s+/)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
-    .join(' ');
+  return uniqueImageUrls(draftImages.length ? draftImages : [fallbackImageUrl]);
 }
 
 function stripHtml(value: string) {

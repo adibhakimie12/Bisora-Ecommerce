@@ -113,6 +113,10 @@
 - Products actions now give visible mocked feedback for duplicate, archive, delete, preview, media upload, category analytics, and inventory bulk actions
 - Products category detail actions now give visible mocked flow for change cover image, add product, remove product, and category-product search/sort interactions
 - Products UX hierarchy is aligned to the current Stitch direction: All Products table-first, Inventory operational, Categories editorial, and Edit Product Studio with right-side summary cards
+- Product variant option values are attributes, not stock: use `Color` values like Pink/Brown/Red and `Size` values like 5/S/M; stock is entered in the variant table's Stock quantity field.
+- Product editor now includes repair helpers for common variant setup mistakes, including converting swapped color option names into Color values and moving accidental color options into the existing Color group.
+- Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
+- Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
 - Marketing visible buttons now trigger working UI flows across overview, discounts, upsells, recovery, broadcasts, funnels, and automation builders
 - Customers visible buttons now trigger working UI flows across customer list, customer profile, notes, reviews, and moderation actions
 - Customers CRM now includes empty states and input guards so owner testing does not produce false-success note/save flows
