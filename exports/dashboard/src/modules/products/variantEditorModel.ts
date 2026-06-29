@@ -24,6 +24,24 @@ export interface VariantOptionRepair {
 }
 
 const standardOptionNames = new Set(['color', 'colour', 'size', 'material', 'style', 'option']);
+const apparelSizeValues = new Set([
+  '2xs',
+  'xs',
+  's',
+  'm',
+  'l',
+  'xl',
+  '2xl',
+  'xxl',
+  '3xl',
+  'xxxl',
+  '4xl',
+  '5xl',
+  'free size',
+  'freesize',
+  'one size',
+  'onesize',
+]);
 
 export function buildVariantOptionRepair(options: VariantOptionDraftState[]): VariantOptionRepair | null {
   const activeOptions = options.filter((option) => option.name.trim() && option.values.length > 0);
@@ -87,7 +105,7 @@ function buildSwappedColorRepair(activeOptions: VariantOptionDraftState[]): Vari
       { id: 'option-color-fixed', name: 'Color', values: colorValues, pendingValue: '' },
       {
         id: 'option-size-fixed',
-        name: sharedValues.every((value) => /^\d+(\.\d+)?$/.test(value)) ? 'Size' : 'Option',
+        name: inferSharedOptionName(sharedValues),
         values: sharedValues,
         pendingValue: '',
       },
@@ -127,6 +145,15 @@ function buildRogueColorRepair(activeOptions: VariantOptionDraftState[]): Varian
 
 function uniqueTextValues(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function inferSharedOptionName(values: string[]) {
+  const looksLikeSize = values.every((value) => {
+    const normalizedValue = normalizeText(value);
+    return /^\d+(\.\d+)?$/.test(normalizedValue) || apparelSizeValues.has(normalizedValue);
+  });
+
+  return looksLikeSize ? 'Size' : 'Option';
 }
 
 function toTitleCase(value: string) {

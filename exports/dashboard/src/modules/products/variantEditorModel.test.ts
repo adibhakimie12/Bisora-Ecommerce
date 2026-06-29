@@ -28,6 +28,18 @@ test('buildVariantOptionRepair converts swapped color option names into color va
   ]);
 });
 
+test('buildVariantOptionRepair keeps apparel sizes in a Size option', () => {
+  const repair = buildVariantOptionRepair([
+    { id: 'red', name: 'Red', values: ['S', 'M'], pendingValue: '' },
+    { id: 'brown', name: 'Brown', values: ['S', 'M'], pendingValue: '' },
+  ]);
+
+  assert.deepEqual(repair?.options.map((option) => [option.name, option.values]), [
+    ['Color', ['Red', 'Brown']],
+    ['Size', ['S', 'M']],
+  ]);
+});
+
 test('buildVariantOptionRepair merges a color accidentally added as another option', () => {
   const repair = buildVariantOptionRepair([
     { id: 'color', name: 'Color', values: ['Pink Colour', 'Brown Colour'], pendingValue: '' },

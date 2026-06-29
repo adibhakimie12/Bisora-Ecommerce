@@ -1282,6 +1282,17 @@ function EditProductStudio({
   }, [totalVariantQuantity]);
 
   useEffect(() => {
+    if (!variantOptionRepair) return;
+    setShowVariantBuilder(true);
+    setVariantOptionDrafts(variantOptionRepair.options);
+    setSelectedVariantName(
+      `${variantOptionRepair.colorValues[0]}${
+        variantOptionRepair.sharedValues.length ? ` / ${variantOptionRepair.sharedValues[0]}` : ''
+      }`,
+    );
+  }, [variantOptionRepair]);
+
+  useEffect(() => {
     if (!slugManuallyEdited) {
       setForm((current) => (current.slug === generatedSlug ? current : { ...current, slug: generatedSlug }));
     }
@@ -1333,16 +1344,6 @@ function EditProductStudio({
   };
   const removeVariantOption = (index: number) => {
     setVariantOptionDrafts((current) => current.filter((_, entryIndex) => entryIndex !== index));
-  };
-  const applyVariantOptionRepair = () => {
-    if (!variantOptionRepair) return;
-    setShowVariantBuilder(true);
-    setVariantOptionDrafts(variantOptionRepair.options);
-    setSelectedVariantName(
-      `${variantOptionRepair.colorValues[0]}${
-        variantOptionRepair.sharedValues.length ? ` / ${variantOptionRepair.sharedValues[0]}` : ''
-      }`,
-    );
   };
   const updateVariantPrice = (variantName: string, price: string) => {
     setVariantPriceDraft((current) =>
@@ -2115,24 +2116,6 @@ function EditProductStudio({
                   {showVariantBuilder ? 'Hide options' : 'Add options'}
                 </button>
               </div>
-
-              {variantOptionRepair && (
-                <div className="flex flex-col gap-3 rounded border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-primary">{variantOptionRepair.title}</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">
-                      {variantOptionRepair.description}
-                    </p>
-                  </div>
-                  <button
-                    className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim"
-                    onClick={applyVariantOptionRepair}
-                    type="button"
-                  >
-                    {variantOptionRepair.actionLabel}
-                  </button>
-                </div>
-              )}
 
               {showVariantBuilder ? (
                 <div className="space-y-3 rounded border border-outline-variant/20 p-4">

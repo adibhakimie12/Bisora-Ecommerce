@@ -114,7 +114,7 @@
 - Products category detail actions now give visible mocked flow for change cover image, add product, remove product, and category-product search/sort interactions
 - Products UX hierarchy is aligned to the current Stitch direction: All Products table-first, Inventory operational, Categories editorial, and Edit Product Studio with right-side summary cards
 - Product variant option values are attributes, not stock: use `Color` values like Pink/Brown/Red and `Size` values like 5/S/M; stock is entered in the variant table's Stock quantity field.
-- Product editor now includes repair helpers for common variant setup mistakes, including converting swapped color option names into Color values and moving accidental color options into the existing Color group.
+- Product editor now automatically repairs common variant setup mistakes, including converting swapped color option names into Color values and moving accidental color options into the existing Color group without requiring seller clicks.
 - Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
 - Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
 - Marketing visible buttons now trigger working UI flows across overview, discounts, upsells, recovery, broadcasts, funnels, and automation builders
