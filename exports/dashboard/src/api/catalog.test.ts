@@ -25,7 +25,13 @@ const apiProduct = {
   vendor: 'Bisora',
   product_type: 'Hijab',
   tags: ['modal', 'premium'],
-  variants: [{ id: 'rose', name: 'Rose', stock: 2, image_url: 'https://example.com/rose.jpg' }],
+  variants: [{
+    id: 'rose',
+    name: 'Rose',
+    stock: 2,
+    image_url: 'https://example.com/rose.jpg',
+    image_urls: ['https://example.com/rose.jpg', 'https://example.com/rose-side.jpg'],
+  }],
   seo_title: 'Premium Modal Hijab',
   seo_description: 'Shop premium modal hijab.',
 };
@@ -86,10 +92,11 @@ assert.deepEqual(mappedProduct.variants, [
     price: 129,
     stock: 2,
     stockState: 'Low Stock',
-    lastUpdated: '',
-    imageUrl: 'https://example.com/rose.jpg',
-  },
-]);
+      lastUpdated: '',
+      imageUrl: 'https://example.com/rose.jpg',
+      imageUrls: ['https://example.com/rose.jpg', 'https://example.com/rose-side.jpg'],
+    },
+  ]);
 
 const payload = mapProductToApiPayload(product);
 assert.equal(payload.category_id, 3);

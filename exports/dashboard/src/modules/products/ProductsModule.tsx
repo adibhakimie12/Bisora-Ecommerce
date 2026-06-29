@@ -1136,7 +1136,10 @@ function EditProductStudio({
     product.variants.map((variant) => [variant.name, String(product.weightKg ?? 0)] as const),
   );
   const [variantImageDraft, setVariantImageDraft] = useState(
-    product.variants.map((variant) => [variant.name, variant.imageUrl ?? product.thumbnailUrl] as const),
+    product.variants.map((variant) => [
+      variant.name,
+      uniqueImageUrls([variant.imageUrl ?? '', ...(variant.imageUrls ?? []), product.thumbnailUrl]),
+    ] as const),
   );
   const [selectedVariantName, setSelectedVariantName] = useState(product.variants[0]?.name ?? 'Default');
   const [mediaUploadTarget, setMediaUploadTarget] = useState<{ type: 'product' } | { type: 'variant'; variantName: string }>({ type: 'product' });
@@ -1191,7 +1194,7 @@ function EditProductStudio({
   const variantPriceMap = new Map(variantPriceDraft);
   const variantSkuMap = new Map(variantSkuDraft);
   const variantWeightMap = new Map(variantWeightDraft);
-  const variantImageMap = new Map(variantImageDraft);
+  const variantImageMap = new Map<string, string[]>(variantImageDraft);
   const builtVariantRows = useMemo(() => {
     const activeOptions = variantOptionDrafts.filter(
       (option) => option.name.trim() && option.values.length > 0,
@@ -1204,7 +1207,8 @@ function EditProductStudio({
         sku: variantSkuMap.get(variant.name) ?? variant.sku,
         price: Number(variantPriceMap.get(variant.name) ?? variant.price),
         stock: Number(variantStockMap.get(variant.name) ?? variant.stock),
-        imageUrl: variantImageMap.get(variant.name) ?? variant.imageUrl ?? product.thumbnailUrl,
+        imageUrls: variantImageMap.get(variant.name) ?? uniqueImageUrls([variant.imageUrl ?? '', ...(variant.imageUrls ?? []), product.thumbnailUrl]),
+        imageUrl: firstImageUrl(variantImageMap.get(variant.name)) ?? variant.imageUrl ?? product.thumbnailUrl,
         sortIndex: index,
       }));
     }
@@ -1237,7 +1241,8 @@ function EditProductStudio({
         sku: variantSkuMap.get(name) ?? existing?.sku ?? `${safeBaseSku}-${generatedSuffix || index + 1}`,
         price: Number(variantPriceMap.get(name) ?? existing?.price ?? Number(form.price || product.price || 0)),
         stock: Number(variantStockMap.get(name) ?? existing?.stock ?? 0),
-        imageUrl: variantImageMap.get(name) ?? existing?.imageUrl ?? product.thumbnailUrl,
+        imageUrls: variantImageMap.get(name) ?? uniqueImageUrls([existing?.imageUrl ?? '', ...(existing?.imageUrls ?? []), product.thumbnailUrl]),
+        imageUrl: firstImageUrl(variantImageMap.get(name)) ?? existing?.imageUrl ?? product.thumbnailUrl,
         sortIndex: index,
       };
     });
@@ -1259,10 +1264,23 @@ function EditProductStudio({
   }, [generatedSlug, slugManuallyEdited]);
 
   const updateVariantStock = (variantName: string, quantity: string) => {
+    const nextQuantity = String(Math.max(0, Number(quantity) || 0));
     setVariantStockDraft((current) =>
       current.some((entry) => entry[0] === variantName)
-        ? current.map((entry) => (entry[0] === variantName ? [variantName, quantity] : entry))
-        : [...current, [variantName, quantity] as const],
+        ? current.map((entry) => (entry[0] === variantName ? [variantName, nextQuantity] : entry))
+        : [...current, [variantName, nextQuantity] as const],
+    );
+    setForm((current) =>
+      ({
+        ...current,
+        quantity: String(
+          builtVariantRows.reduce(
+            (sum, variant) =>
+              sum + Number(variant.name === variantName ? nextQuantity : variantStockMap.get(variant.name) ?? variant.stock ?? 0),
+            0,
+          ),
+        ),
+      }),
     );
   };
   const updateVariantOptionDraft = (index: number, field: 'name' | 'pendingValue', value: string) => {
@@ -1454,11 +1472,25 @@ function EditProductStudio({
     setPendingImageUrl('');
     setShowImageModal(false);
   };
-  const updateVariantImage = (variantName: string, imageUrl: string) => {
+  const setVariantMainImage = (variantName: string, imageUrl: string) => {
+    const nextImageUrl = imageUrl.trim();
+    if (!nextImageUrl) return;
     setVariantImageDraft((current) =>
       current.some((entry) => entry[0] === variantName)
-        ? current.map((entry) => (entry[0] === variantName ? [variantName, imageUrl] : entry))
-        : [...current, [variantName, imageUrl] as const],
+        ? current.map((entry) => (entry[0] === variantName ? [variantName, uniqueImageUrls([nextImageUrl, ...entry[1]])] : entry))
+        : [...current, [variantName, [nextImageUrl]] as const],
+    );
+  };
+  const addVariantImages = (variantName: string, imageUrls: string[]) => {
+    setVariantImageDraft((current) =>
+      current.some((entry) => entry[0] === variantName)
+        ? current.map((entry) => (entry[0] === variantName ? [variantName, uniqueImageUrls([...entry[1], ...imageUrls])] : entry))
+        : [...current, [variantName, uniqueImageUrls(imageUrls)] as const],
+    );
+  };
+  const removeVariantImage = (variantName: string, imageUrl: string) => {
+    setVariantImageDraft((current) =>
+      current.map((entry) => (entry[0] === variantName ? [variantName, entry[1].filter((url) => url !== imageUrl)] : entry)),
     );
   };
   const handleMediaFileChange = async (files?: FileList | null) => {
@@ -1486,7 +1518,7 @@ function EditProductStudio({
 
       const firstUrl = publicUrls[0];
       if (mediaUploadTarget.type === 'variant') {
-        updateVariantImage(mediaUploadTarget.variantName, firstUrl);
+        addVariantImages(mediaUploadTarget.variantName, publicUrls);
       } else {
         setForm((current) => ({
           ...current,
@@ -1525,7 +1557,7 @@ function EditProductStudio({
     const nextSlug = safeSlug;
     const numericPrice = Number(form.price) || 0;
     const numericCompareAt = Number(form.compareAt) || 0;
-    const numericStock = Number(form.quantity) || 0;
+    const numericStock = manageStock ? totalVariantQuantity : Number(form.quantity) || 0;
     const numericWeight = Number(form.weightKg) || 0;
     const selectedCategory = categoryOptions.find((category) => category.name === form.categoryName);
     const nextId =
@@ -1540,7 +1572,8 @@ function EditProductStudio({
       stock: Number(variantStockMap.get(variant.name) ?? variant.stock) || 0,
       stockState: deriveStockState(Number(variantStockMap.get(variant.name) ?? variant.stock) || 0),
       lastUpdated: 'Today',
-      imageUrl: variantImageMap.get(variant.name) ?? variant.imageUrl ?? form.thumbnailUrl,
+      imageUrls: variantImageMap.get(variant.name) ?? uniqueImageUrls([variant.imageUrl ?? '', ...(variant.imageUrls ?? []), form.thumbnailUrl]),
+      imageUrl: firstImageUrl(variantImageMap.get(variant.name)) ?? variant.imageUrl ?? form.thumbnailUrl,
     }));
     const nextRecord: Product = {
       ...product,
@@ -2203,17 +2236,27 @@ function EditProductStudio({
               <div className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-3 rounded border border-outline-variant/20 p-4">
-                    <p className="text-sm font-medium">Image</p>
-                    <div className="flex items-center gap-3">
-                      <button className="rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low" onClick={() => onUploadMedia({ type: 'variant', variantName: selectedVariant.name })} type="button">
-                        Add image
+                    <p className="text-sm font-medium">Variant images</p>
+                    <div className="flex flex-wrap gap-3">
+                      {uniqueImageUrls(selectedVariant.imageUrls?.length ? selectedVariant.imageUrls : [selectedVariant.imageUrl ?? form.thumbnailUrl]).map((imageUrl) => (
+                        <button
+                          key={imageUrl}
+                          className={`relative h-16 w-16 overflow-hidden rounded border ${selectedVariant.imageUrl === imageUrl ? 'border-primary' : 'border-outline-variant/30'}`}
+                          onClick={() => setVariantMainImage(selectedVariant.name, imageUrl)}
+                          type="button"
+                        >
+                          <img alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" src={imageUrl} />
+                          {selectedVariant.imageUrl === imageUrl && <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold text-on-primary">Main</span>}
+                        </button>
+                      ))}
+                      <button className="grid h-16 w-16 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant" onClick={() => onUploadMedia({ type: 'variant', variantName: selectedVariant.name })} type="button">
+                        +
                       </button>
-                      <img alt="" className="h-14 w-14 rounded object-cover" referrerPolicy="no-referrer" src={selectedVariantImageUrl(selectedVariant, form.thumbnailUrl)} />
                     </div>
                     <Field
-                      label="Variant image URL"
-                      value={variantImageMap.get(selectedVariant.name) ?? selectedVariant.imageUrl ?? form.thumbnailUrl}
-                      onChange={(value) => updateVariantImage(selectedVariant.name, value)}
+                      label="Main variant image URL"
+                      value={selectedVariant.imageUrl ?? form.thumbnailUrl}
+                      onChange={(value) => setVariantMainImage(selectedVariant.name, value)}
                     />
                   </div>
                   <div className="space-y-3 rounded border border-outline-variant/20 p-4">
@@ -2288,19 +2331,46 @@ function EditProductStudio({
           )}
 
           {(isNewProduct || activeEditorTab === 'Images' || activeEditorTab === 'Variants') && (
-          <Panel title="Color Media Mapping">
+          <Panel title="Variant Images">
             <div className="space-y-4">
-              {builtVariantRows.slice(0, 2).map((variant) => (
-                <div key={variant.id} className="space-y-2">
-                  <p className="text-sm font-medium">{variant.name}</p>
-                  <div className="flex gap-3">
-                    <img alt="" className="h-20 w-20 rounded object-cover" referrerPolicy="no-referrer" src={selectedVariantImageUrl(variant, form.thumbnailUrl)} />
+              <p className="text-xs text-on-surface-variant">
+                Assign one or more images to each variant. Click an image to make it the main image for that variant.
+              </p>
+              {builtVariantRows.map((variant) => {
+                const imageUrls = uniqueImageUrls(variant.imageUrls?.length ? variant.imageUrls : [variant.imageUrl ?? form.thumbnailUrl]);
+                return (
+                <div key={variant.id} className="space-y-2 rounded border border-outline-variant/20 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">{variant.name}</p>
+                    <span className="text-xs text-on-surface-variant">{variant.stock} in stock</span>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    {imageUrls.map((imageUrl) => (
+                      <div key={imageUrl} className="group relative">
+                        <button
+                          className={`relative h-20 w-20 overflow-hidden rounded border ${variant.imageUrl === imageUrl ? 'border-primary' : 'border-outline-variant/30'}`}
+                          onClick={() => setVariantMainImage(variant.name, imageUrl)}
+                          type="button"
+                        >
+                          <img alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" src={imageUrl} />
+                          {variant.imageUrl === imageUrl && <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold text-on-primary">Main</span>}
+                        </button>
+                        <button
+                          className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full border border-outline-variant/30 bg-surface-lowest text-on-surface-variant opacity-0 shadow group-hover:opacity-100"
+                          onClick={() => removeVariantImage(variant.name, imageUrl)}
+                          type="button"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
                     <button className="grid h-20 w-20 place-items-center rounded border border-dashed border-outline-variant/40 bg-surface-low text-sm text-on-surface-variant" onClick={() => onUploadMedia({ type: 'variant', variantName: variant.name })} type="button">
                       +
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </Panel>
           )}
@@ -3094,6 +3164,10 @@ function uniqueImageUrls(urls: string[]) {
   return Array.from(new Set(urls.map((url) => url.trim()).filter(Boolean)));
 }
 
+function firstImageUrl(urls?: string[]) {
+  return uniqueImageUrls(urls ?? [])[0];
+}
+
 function stripHtml(value: string) {
   return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -3185,8 +3259,8 @@ function deriveVariantOptionDrafts(product: Product): VariantOptionDraft[] {
   });
 }
 
-function selectedVariantImageUrl(variant: { imageUrl?: string }, fallback: string) {
-  return variant.imageUrl || fallback;
+function selectedVariantImageUrl(variant: { imageUrl?: string; imageUrls?: string[] }, fallback: string) {
+  return variant.imageUrl || firstImageUrl(variant.imageUrls) || fallback;
 }
 
 function duplicateProduct(product: Product): Product {
