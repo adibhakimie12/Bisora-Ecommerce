@@ -1678,7 +1678,7 @@ function EditProductStudio({
           <Panel title="Basic Information">
             <div className="space-y-4">
               <Field label="Product name" value={form.title} onChange={(value) => updateForm('title', value)} />
-              <label className="block space-y-2 text-sm font-medium">
+              <div className="block space-y-2 text-sm font-medium">
                 <span>Description</span>
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2" ref={descriptionToolbarRef}>
@@ -1977,7 +1977,7 @@ function EditProductStudio({
                     Create product kekal simple. Rich description tools di sini guna insert/wrap snippets supaya seller boleh sediakan content awal sebelum save dan pergi edit workspace.
                   </p>
                 </div>
-              </label>
+              </div>
             </div>
           </Panel>
           )}
