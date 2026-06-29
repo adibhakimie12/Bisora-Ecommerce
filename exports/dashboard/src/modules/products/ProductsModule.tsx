@@ -1216,8 +1216,9 @@ function EditProductStudio({
     () => buildVariantOptionRepair(variantOptionDrafts),
     [variantOptionDrafts],
   );
+  const effectiveVariantOptionDrafts = variantOptionRepair?.options ?? variantOptionDrafts;
   const builtVariantRows = useMemo(() => {
-    const activeOptions = variantOptionDrafts.filter(
+    const activeOptions = effectiveVariantOptionDrafts.filter(
       (option) => option.name.trim() && option.values.length > 0,
     );
 
@@ -1267,7 +1268,7 @@ function EditProductStudio({
         sortIndex: index,
       };
     });
-  }, [form.price, form.sku, product.price, product.sku, product.thumbnailUrl, product.variants, variantOptionDrafts, variantStockMap, variantPriceMap, variantSkuMap, variantImageMap]);
+  }, [form.price, form.sku, product.price, product.sku, product.thumbnailUrl, product.variants, effectiveVariantOptionDrafts, variantStockMap, variantPriceMap, variantSkuMap, variantImageMap]);
 
   const totalVariantQuantity = useMemo(
     () => builtVariantRows.reduce((sum, variant) => sum + Number(variant.stock), 0),

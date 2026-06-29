@@ -40,6 +40,19 @@ test('buildVariantOptionRepair keeps apparel sizes in a Size option', () => {
   ]);
 });
 
+test('buildVariantOptionRepair converts three swapped color option names into one Color option', () => {
+  const repair = buildVariantOptionRepair([
+    { id: 'red', name: 'Red', values: ['M', 'S'], pendingValue: '' },
+    { id: 'pink', name: 'Pink', values: ['M', 'S'], pendingValue: '' },
+    { id: 'brown', name: 'Brown', values: ['M', 'S'], pendingValue: '' },
+  ]);
+
+  assert.deepEqual(repair?.options.map((option) => [option.name, option.values]), [
+    ['Color', ['Red', 'Pink', 'Brown']],
+    ['Size', ['M', 'S']],
+  ]);
+});
+
 test('buildVariantOptionRepair merges a color accidentally added as another option', () => {
   const repair = buildVariantOptionRepair([
     { id: 'color', name: 'Color', values: ['Pink Colour', 'Brown Colour'], pendingValue: '' },
