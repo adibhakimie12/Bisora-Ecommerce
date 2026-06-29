@@ -87,8 +87,8 @@ export function splitVariantName(variantName: string) {
 }
 
 function buildSwappedColorRepair(activeOptions: VariantOptionDraftState[]): VariantOptionRepair | null {
-  const sharedSignature = activeOptions[0]?.values.map(normalizeText).join('|') ?? '';
-  const sameValues = activeOptions.every((option) => option.values.map(normalizeText).join('|') === sharedSignature);
+  const sharedSignature = buildSortedValueSignature(activeOptions[0]?.values ?? []);
+  const sameValues = activeOptions.every((option) => buildSortedValueSignature(option.values) === sharedSignature);
   if (!sameValues) return null;
 
   const colorValues = uniqueTextValues(activeOptions.map((option) => toTitleCase(option.name)));
@@ -118,11 +118,11 @@ function buildRogueColorRepair(activeOptions: VariantOptionDraftState[]): Varian
   const sizeOption = activeOptions.find((option) => normalizeText(option.name) === 'size');
   if (!colorOption || !sizeOption) return null;
 
-  const sizeSignature = sizeOption.values.map(normalizeText).join('|');
+  const sizeSignature = buildSortedValueSignature(sizeOption.values);
   const rogueOptions = activeOptions.filter((option) => {
     const name = normalizeText(option.name);
     if (standardOptionNames.has(name)) return false;
-    return option.values.map(normalizeText).join('|') === sizeSignature;
+    return buildSortedValueSignature(option.values) === sizeSignature;
   });
   if (rogueOptions.length === 0) return null;
 
@@ -145,6 +145,10 @@ function buildRogueColorRepair(activeOptions: VariantOptionDraftState[]): Varian
 
 function uniqueTextValues(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function buildSortedValueSignature(values: string[]) {
+  return [...new Set(values.map(normalizeText).filter(Boolean))].sort().join('|');
 }
 
 function inferSharedOptionName(values: string[]) {

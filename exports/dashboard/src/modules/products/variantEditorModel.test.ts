@@ -53,6 +53,19 @@ test('buildVariantOptionRepair converts three swapped color option names into on
   ]);
 });
 
+test('buildVariantOptionRepair handles swapped color options even when size order differs', () => {
+  const repair = buildVariantOptionRepair([
+    { id: 'red', name: 'Red', values: ['M', 'S'], pendingValue: '' },
+    { id: 'pink', name: 'Pink', values: ['S', 'M'], pendingValue: '' },
+    { id: 'brown', name: 'Brown', values: ['S', 'M'], pendingValue: '' },
+  ]);
+
+  assert.deepEqual(repair?.options.map((option) => [option.name, option.values]), [
+    ['Color', ['Red', 'Pink', 'Brown']],
+    ['Size', ['M', 'S']],
+  ]);
+});
+
 test('buildVariantOptionRepair merges a color accidentally added as another option', () => {
   const repair = buildVariantOptionRepair([
     { id: 'color', name: 'Color', values: ['Pink Colour', 'Brown Colour'], pendingValue: '' },
