@@ -84,6 +84,33 @@ test('loadProducts reads back the same records persisted through saveProducts', 
   assert.equal(loadProducts()[0]?.title, 'Persistent Product');
 });
 
+test('loadProducts does not show bundled demo products for authenticated tenant sessions', () => {
+  const storage = new FakeStorage();
+  storage.setItem('bisora.apiToken', 'token-123');
+  storage.setItem('bisora.tenantId', '77');
+  globalThis.window = {
+    localStorage: storage,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as unknown as Window & typeof globalThis;
+
+  assert.deepEqual(loadProducts(), []);
+});
+
+test('loadProducts ignores stale local product cache for authenticated tenant sessions', () => {
+  const storage = new FakeStorage();
+  storage.setItem('bisora.apiToken', 'token-123');
+  storage.setItem('bisora.tenantId', '77');
+  storage.setItem('bisora-storefront-products', JSON.stringify([createProduct('Stale Demo Cache')]));
+  globalThis.window = {
+    localStorage: storage,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as unknown as Window & typeof globalThis;
+
+  assert.deepEqual(loadProducts(), []);
+});
+
 test('syncProductsFromApi hydrates shared snapshot when backend credentials exist', async () => {
   const storage = new FakeStorage();
   storage.setItem('bisora.apiToken', 'token-123');
@@ -120,6 +147,28 @@ test('syncProductsFromApi hydrates shared snapshot when backend credentials exis
     await syncProductsFromApi();
     assert.equal(getProductSnapshot()[0]?.title, 'Backend Product');
     assert.equal(getProductSnapshot()[0]?.price, 25);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('syncProductsFromApi keeps an authenticated tenant empty when the backend has no products', async () => {
+  const storage = new FakeStorage();
+  storage.setItem('bisora.apiToken', 'token-123');
+  storage.setItem('bisora.tenantId', '77');
+  globalThis.window = {
+    localStorage: storage,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as unknown as Window & typeof globalThis;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+  try {
+    await syncProductsFromApi();
+    assert.deepEqual(getProductSnapshot(), []);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -38,6 +38,7 @@ import { saveProductToApi, useStorefrontProducts } from '../storefront/productSt
 import { createCatalogApi } from '../../api/catalog';
 import { uploadMediaFile } from '../../api/media';
 import { ApiError } from '../../api/http';
+import { shouldUseDemoData } from '../../liveDataMode';
 import { ProductStatusBadge } from './ProductStatusBadge';
 import type { Category, CategoryDetailTab, Product, ProductTab, StockState } from './types';
 
@@ -71,7 +72,7 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [dialog, setDialog] = useState<ActionDialogState | null>(null);
   const [productRecords, setProductRecords] = useStorefrontProducts();
-  const [categoryRecords, setCategoryRecords] = useState<Category[]>(categories);
+  const [categoryRecords, setCategoryRecords] = useState<Category[]>(() => (shouldUseDemoData() ? categories : []));
 
   useEffect(() => {
     if (!banner) return undefined;
@@ -405,6 +406,17 @@ function AllProductsPage({
   const [categoryFilter, setCategoryFilter] = useState('All Categories');
   const [query, setQuery] = useState('');
   const publishedCount = products.filter((product) => product.status === 'Active').length;
+  const summaryMetrics = useMemo(
+    () =>
+      productKpiMetrics.map((metric) => {
+        if (metric.label === 'Total Products') return { ...metric, value: String(products.length) };
+        if (metric.label === 'Low Stock') return { ...metric, value: String(products.filter((product) => product.stockState === 'Low Stock').length) };
+        if (metric.label === 'Categories') return { ...metric, value: String(categories.length) };
+        if (metric.label === 'Variants') return { ...metric, value: String(products.flatMap((product) => product.variants).length) };
+        return metric;
+      }),
+    [categories.length, products],
+  );
   const filteredProducts = useMemo(
     () =>
       products.filter((product) => {
@@ -425,7 +437,7 @@ function AllProductsPage({
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="Product summary">
-        {productKpiMetrics.map((metric) => (
+        {summaryMetrics.map((metric) => (
           <article key={metric.label} className="rounded border border-outline-variant/20 bg-surface-lowest p-5">
             <div className="flex items-start justify-between gap-4">
               <div>

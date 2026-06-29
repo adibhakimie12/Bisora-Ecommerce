@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { API_STORAGE_KEYS } from '../../api/http';
+import { shouldUseDemoData } from '../../liveDataMode';
 import {
   convertDraftOrder,
   createDraftOrder,
@@ -197,8 +198,8 @@ function hasApiToken() {
 }
 
 export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps) {
-  const [orderRecords, setOrderRecords] = useState<Order[]>(orders);
-  const [draftOrderRecords, setDraftOrderRecords] = useState<DraftOrderRecord[]>(demoDraftOrders);
+  const [orderRecords, setOrderRecords] = useState<Order[]>(() => (shouldUseDemoData() ? orders : []));
+  const [draftOrderRecords, setDraftOrderRecords] = useState<DraftOrderRecord[]>(() => (shouldUseDemoData() ? demoDraftOrders : []));
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [showBulkShipment, setShowBulkShipment] = useState(false);
@@ -237,10 +238,8 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
 
     fetchOrders()
       .then((items) => {
-        if (items.length > 0) {
-          setOrderRecords(items);
-          setOrderTimelineMap(Object.fromEntries(items.map((order) => [order.id, createOrderTimelineSeed(order)])));
-        }
+        setOrderRecords(items);
+        setOrderTimelineMap(Object.fromEntries(items.map((order) => [order.id, createOrderTimelineSeed(order)])));
       })
       .catch(() => {
         // Keep bundled demo orders available when backend is offline.
@@ -248,9 +247,7 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
 
     fetchDraftOrders()
       .then((items) => {
-        if (items.length > 0) {
-          setDraftOrderRecords(items);
-        }
+        setDraftOrderRecords(items);
       })
       .catch(() => {
         // Keep bundled demo drafts available when backend is offline.
@@ -864,6 +861,20 @@ function OrdersListPage({
   const [paymentFilter, setPaymentFilter] = useState<'Status: All' | 'Paid' | 'Pending'>('Status: All');
   const [fulfillmentFilter, setFulfillmentFilter] = useState<'Fulfillment' | 'Processing' | 'Shipped' | 'Unfulfilled' | 'Delivered'>('Fulfillment');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const summaryMetrics = useMemo(
+    () =>
+      orderKpiMetrics.map((metric) => {
+        if (metric.label === 'Total Revenue') {
+          return { ...metric, value: `$${orders.reduce((sum, order) => sum + order.total, 0).toLocaleString('en-US')}` };
+        }
+        if (metric.label === 'Total Orders') return { ...metric, value: String(orders.length) };
+        if (metric.label === 'Pending Fulfillment') {
+          return { ...metric, value: String(orders.filter((order) => order.fulfillmentStatus !== 'Delivered').length) };
+        }
+        return metric;
+      }),
+    [orders],
+  );
 
   const filteredOrders = useMemo(
     () =>
@@ -881,7 +892,7 @@ function OrdersListPage({
 
         return queryPass && paymentPass && fulfillmentPass;
       }),
-    [fulfillmentFilter, paymentFilter, query],
+    [fulfillmentFilter, orders, paymentFilter, query],
   );
 
   const toggleOrder = (orderId: string) => {
@@ -907,7 +918,7 @@ function OrdersListPage({
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-3" aria-label="Order summary">
-        {orderKpiMetrics.map((metric) => (
+        {summaryMetrics.map((metric) => (
           <article key={metric.label} className="rounded border border-outline-variant/20 bg-surface-lowest p-5">
             <div className="flex items-start justify-between gap-4">
               <div>

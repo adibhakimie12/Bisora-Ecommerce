@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { createCatalogApi } from '../../api/catalog';
+import { hasLiveTenantSession, shouldUseDemoData } from '../../liveDataMode';
 import { products } from '../products/data';
 import type { Product } from '../products/types';
 
@@ -29,11 +30,7 @@ function notifyProductListeners() {
 }
 
 function hasApiCredentials() {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  return Boolean(window.localStorage.getItem('bisora.apiToken') && window.localStorage.getItem('bisora.tenantId'));
+  return hasLiveTenantSession();
 }
 
 function attachStorageListener() {
@@ -52,6 +49,10 @@ function attachStorageListener() {
 function readProductsFromStorage(): Product[] {
   if (typeof window === 'undefined') {
     return products;
+  }
+
+  if (!shouldUseDemoData()) {
+    return [];
   }
 
   const saved = window.localStorage.getItem(PRODUCT_STORAGE_KEY);

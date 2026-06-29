@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowLeft, CheckCircle2, Mail, MoreHorizontal, Plus, Search, Star, X } from 'lucide-react';
 import { API_STORAGE_KEYS } from '../../api/http';
+import { shouldUseDemoData } from '../../liveDataMode';
 import {
   addCustomerNote as addCustomerNoteApi,
   contactCustomer as contactCustomerApi,
@@ -38,8 +39,8 @@ function hasApiToken() {
 }
 
 export function CustomersModule({ section, customerId }: CustomersModuleProps) {
-  const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
-  const [reviews, setReviews] = useState<ReviewRecord[]>(initialReviews);
+  const [customers, setCustomers] = useState<Customer[]>(() => (shouldUseDemoData() ? initialCustomers : []));
+  const [reviews, setReviews] = useState<ReviewRecord[]>(() => (shouldUseDemoData() ? initialReviews : []));
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [activeMenuCustomerId, setActiveMenuCustomerId] = useState<string | null>(null);
   const [showModerationReviewId, setShowModerationReviewId] = useState<string | null>(null);
@@ -57,9 +58,7 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
 
     fetchCustomers()
       .then((items) => {
-        if (items.length > 0) {
-          setCustomers(items);
-        }
+        setCustomers(items);
       })
       .catch(() => {
         // Keep bundled demo customers available when backend is offline.
@@ -67,9 +66,7 @@ export function CustomersModule({ section, customerId }: CustomersModuleProps) {
 
     fetchReviews()
       .then((items) => {
-        if (items.length > 0) {
-          setReviews(items);
-        }
+        setReviews(items);
       })
       .catch(() => {
         // Keep bundled demo reviews available when backend is offline.
