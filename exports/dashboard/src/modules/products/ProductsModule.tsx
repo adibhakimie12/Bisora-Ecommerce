@@ -1321,7 +1321,10 @@ function EditProductStudio({
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0);
-    if (!isDescriptionRange(range, descriptionRef.current)) return;
+    if (!isDescriptionRange(range, descriptionRef.current) || range.collapsed) {
+      descriptionSelectionRef.current = null;
+      return;
+    }
     descriptionSelectionRef.current = range.cloneRange();
   };
   const restoreDescriptionSelection = () => {
@@ -1959,6 +1962,10 @@ function EditProductStudio({
                       onBlur={() => {
                         syncDescriptionFromEditor();
                         saveDescriptionSelection();
+                      }}
+                      onFocus={() => {
+                        if (window.getSelection()?.toString()) return;
+                        descriptionSelectionRef.current = null;
                       }}
                       onInput={syncDescriptionFromEditor}
                       onKeyUp={saveDescriptionSelection}
