@@ -136,16 +136,14 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
               setProductRecords((current) =>
                 current.map((item) => (item.id === record.id ? savedRecord : item)),
               );
+              showBanner('Product saved', `${savedRecord.title} was saved to the live catalog.`);
+              window.location.hash = '/products';
             })
             .catch((error: unknown) => {
               setProductRecords(previousRecords);
               const message = error instanceof ApiError ? error.message : 'Product could not be saved to backend.';
               showDialog('Product save blocked', message, 'Review package');
             });
-          showBanner('Product saved', `${record.title} SEO, slug, and product changes were saved.`);
-          if (isNewProduct) {
-            window.location.hash = `/products/edit/${record.id}`;
-          }
         }}
       />
     );
@@ -631,6 +629,7 @@ function InventoryPage({
   const [categoryFilter, setCategoryFilter] = useState('All Categories');
   const [inventoryView, setInventoryView] = useState<'Grouped' | 'Flat'>('Grouped');
   const [collapsedProductIds, setCollapsedProductIds] = useState<string[]>([]);
+  const [expandedColorGroupIds, setExpandedColorGroupIds] = useState<string[]>([]);
   const [activeVariantMenuId, setActiveVariantMenuId] = useState<string | null>(null);
   const stockMap = new Map(stockDraft);
   const lastUpdatedMap = new Map(lastUpdatedDraft);
@@ -672,6 +671,12 @@ function InventoryPage({
     acc[row.product.id] = (acc[row.product.id] ?? 0) + quantity;
     return acc;
   }, {});
+  const groupedStockByColor = filteredRows.reduce<Record<string, number>>((acc, row) => {
+    const colorGroupId = buildInventoryColorGroupId(row.product.id, row.variant.name);
+    const quantity = Number(stockMap.get(row.variant.id) ?? row.variant.stock);
+    acc[colorGroupId] = (acc[colorGroupId] ?? 0) + quantity;
+    return acc;
+  }, {});
   const groupedProductIds = filteredRows.reduce<string[]>((acc, row) => {
     if (!acc.includes(row.product.id)) {
       acc.push(row.product.id);
@@ -684,6 +689,13 @@ function InventoryPage({
       current.includes(productId)
         ? current.filter((id) => id !== productId)
         : [...current, productId],
+    );
+  };
+  const toggleColorGroup = (colorGroupId: string) => {
+    setExpandedColorGroupIds((current) =>
+      current.includes(colorGroupId)
+        ? current.filter((id) => id !== colorGroupId)
+        : [...current, colorGroupId],
     );
   };
 
@@ -786,9 +798,11 @@ function InventoryPage({
             <button
               className="rounded border border-outline-variant/30 px-2 py-1 text-xs text-on-surface-variant hover:bg-surface-low hover:text-on-surface"
               onClick={() =>
-                setCollapsedProductIds(
-                  collapsedProductIds.length === groupedProductIds.length ? [] : groupedProductIds,
-                )
+                {
+                  const shouldExpandAll = collapsedProductIds.length === groupedProductIds.length;
+                  setCollapsedProductIds(shouldExpandAll ? [] : groupedProductIds);
+                  setExpandedColorGroupIds([]);
+                }
               }
               type="button"
             >
@@ -837,6 +851,17 @@ function InventoryPage({
                 const isFirstVariantForProduct = index === 0 || filteredRows[index - 1].product.id !== product.id;
                 const shouldShowGroupHeader = inventoryView === 'Grouped' && isFirstVariantForProduct;
                 const isCollapsed = collapsedProductIds.includes(product.id);
+                const colorName = getInventoryColorName(variant.name);
+                const colorGroupId = buildInventoryColorGroupId(product.id, variant.name);
+                const isColorExpanded = expandedColorGroupIds.includes(colorGroupId);
+                const previousRow = filteredRows[index - 1];
+                const shouldShowColorHeader =
+                  inventoryView === 'Grouped' &&
+                  !isCollapsed &&
+                  (!previousRow ||
+                    previousRow.product.id !== product.id ||
+                    getInventoryColorName(previousRow.variant.name) !== colorName);
+                const shouldShowVariantRow = inventoryView === 'Flat' || (!isCollapsed && isColorExpanded);
                 return (
                 <Fragment key={variant.id}>
                 {shouldShowGroupHeader && (
@@ -859,21 +884,40 @@ function InventoryPage({
                     </td>
                   </tr>
                 )}
-                {(inventoryView === 'Flat' || !isCollapsed) && (
+                {shouldShowColorHeader && (
+                  <tr className="bg-surface-lowest">
+                    <td className="px-4 py-3"></td>
+                    <td className="px-4 py-3" colSpan={3}>
+                      <button className="flex items-center gap-3 text-left" onClick={() => toggleColorGroup(colorGroupId)} type="button">
+                        {isColorExpanded ? <ChevronDown className="h-4 w-4 text-on-surface-variant" /> : <ChevronRight className="h-4 w-4 text-on-surface-variant" />}
+                        <img alt="" className="h-10 w-10 rounded object-cover" referrerPolicy="no-referrer" src={variant.imageUrl ?? product.thumbnailUrl} />
+                        <div>
+                          <p className="text-sm font-semibold">{colorName}</p>
+                          <p className="text-xs text-on-surface-variant">{product.title}</p>
+                        </div>
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-sm font-semibold">{groupedStockByColor[colorGroupId] ?? 0} units</td>
+                    <td className="px-4 py-3"><ProductStatusBadge status={deriveStockState(groupedStockByColor[colorGroupId] ?? 0)} /></td>
+                    <td className="px-4 py-3 text-sm text-on-surface-variant">Grouped</td>
+                    <td className="px-4 py-3 text-right text-xs text-on-surface-variant">Expand for sizes</td>
+                  </tr>
+                )}
+                {shouldShowVariantRow && (
                 <tr key={variant.id} className={selectedVariantIds.includes(variant.id) ? 'bg-primary/5' : 'hover:bg-surface-low'}>
                   <td className="px-4 py-4">
                     <input checked={selectedVariantIds.includes(variant.id)} onChange={() => toggleVariant(variant.id)} type="checkbox" />
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
-                      <img alt="" className="h-12 w-12 rounded object-cover" referrerPolicy="no-referrer" src={product.thumbnailUrl} />
+                      <img alt="" className="h-12 w-12 rounded object-cover" referrerPolicy="no-referrer" src={variant.imageUrl ?? product.thumbnailUrl} />
                       <div>
-                        <p className="text-sm font-semibold">{product.title}</p>
+                        <p className="text-sm font-semibold">{inventoryView === 'Grouped' ? colorName : product.title}</p>
                         <p className="text-xs text-on-surface-variant">{product.categoryName}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-sm text-on-surface-variant">{variant.name}</td>
+                  <td className="px-4 py-4 text-sm text-on-surface-variant">{inventoryView === 'Grouped' ? getInventorySizeName(variant.name) : variant.name}</td>
                   <td className="px-4 py-4 font-mono text-sm">{variant.sku}</td>
                   <td className="px-4 py-4">
                     <div className="inline-flex items-center rounded border border-outline-variant/30">
@@ -3355,6 +3399,19 @@ function getVariantImages(
     [],
   );
   return uniqueImageUrls(draftImages.length ? draftImages : [fallbackImageUrl]);
+}
+
+function getInventoryColorName(variantName: string) {
+  return variantName.split('/')[0]?.trim() || variantName;
+}
+
+function getInventorySizeName(variantName: string) {
+  const parts = variantName.split('/').map((part) => part.trim()).filter(Boolean);
+  return parts.length > 1 ? parts.slice(1).join(' / ') : variantName;
+}
+
+function buildInventoryColorGroupId(productId: string, variantName: string) {
+  return `${productId}:${getInventoryColorName(variantName).toLowerCase()}`;
 }
 
 function stripHtml(value: string) {
