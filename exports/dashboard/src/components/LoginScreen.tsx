@@ -13,8 +13,8 @@ import {
   Store,
 } from 'lucide-react';
 import { createApiClient } from '../api/http';
-import { getStoredSession, type AdminSession } from '../api/authSession';
-import { resolveLoginCredentials } from '../api/demoCredentials';
+import { getStoredSession, saveStoredSession, type AdminSession } from '../api/authSession';
+import { createOfflineDemoLoginResponse, resolveLoginCredentials } from '../api/demoCredentials';
 import { getAuthErrorMessage, getLoginModeCopy, getPostAuthRoute, type AuthMode } from './loginModeCopy';
 
 type LoginTheme = 'indigo' | 'obsidian' | 'minimalist';
@@ -117,6 +117,15 @@ export function LoginScreen({ onLogin }: { onLogin: (session: AdminSession) => v
       window.location.hash = getPostAuthRoute({ isPlatformOwner: result.user.is_platform_owner, mode });
       onLogin(session);
     } catch (error) {
+      const offlineDemo = mode === 'login' ? createOfflineDemoLoginResponse({ email, password }) : null;
+      if (offlineDemo && (error instanceof TypeError || (error instanceof Error && error.message.includes('Unexpected token')))) {
+        saveStoredSession(offlineDemo);
+        const session = getStoredSession();
+        if (!session) throw new Error('Session could not be saved.');
+        window.location.hash = getPostAuthRoute({ isPlatformOwner: offlineDemo.user.is_platform_owner, mode });
+        onLogin(session);
+        return;
+      }
       setError(getAuthErrorMessage(mode, error));
     } finally {
       setSubmitting(false);
