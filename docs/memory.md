@@ -129,6 +129,8 @@
 - Current storefront theme connection applies the live theme shell, header, hero, product cards, cart, buttons, and fallback branding. Full Builder Studio page sections, menus, footer, and page content are the next storefront phase.
 - Public storefront homepage route `#/store/[tenant-slug]` now renders enabled Builder Studio homepage sections for the published theme, falling back to theme-specific default sections when no edited section state exists.
 - Public storefront product route `#/store/[tenant-slug]/product/[product-slug]` remains product-detail focused with cart/checkout while homepage section wiring is completed first.
+- Public storefront checkout must create a seller-visible order even when the public checkout API is not reachable yet; local fallback orders are stored in `bisora-seller-orders`, deduct cached catalog stock, and appear in Seller Orders.
+- Buyer order tracking should first try the public order API, then fall back to the local seller order store for current rollout testing.
 - Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
 - Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
 - Marketing visible buttons now trigger working UI flows across overview, discounts, upsells, recovery, broadcasts, funnels, and automation builders

@@ -35,6 +35,7 @@ import {
 } from '../../api/commerce';
 import { createCatalogApi } from '../../api/catalog';
 import { orderKpiMetrics, orders } from './data';
+import { loadLocalOrders, removeLocalOrders, subscribeOrders, updateLocalOrder } from './orderStore';
 import type { Order } from './types';
 import type { Product } from '../products/types';
 import { BulkShipmentModal } from './BulkShipmentModal';
@@ -197,8 +198,20 @@ function hasApiToken() {
   return Boolean(window.localStorage.getItem(API_STORAGE_KEYS.token));
 }
 
+function mergeOrderLists(localOrders: Order[], remoteOrders: Order[]) {
+  const seen = new Set<string>();
+  return [...localOrders, ...remoteOrders].filter((order) => {
+    if (seen.has(order.id)) return false;
+    seen.add(order.id);
+    return true;
+  });
+}
+
 export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps) {
-  const [orderRecords, setOrderRecords] = useState<Order[]>(() => (shouldUseDemoData() ? orders : []));
+  const [orderRecords, setOrderRecords] = useState<Order[]>(() => {
+    const localOrders = loadLocalOrders();
+    return shouldUseDemoData() && localOrders.length === 0 ? orders : localOrders;
+  });
   const [draftOrderRecords, setDraftOrderRecords] = useState<DraftOrderRecord[]>(() => (shouldUseDemoData() ? demoDraftOrders : []));
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -225,6 +238,19 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
   const activeTab = normalizeOrdersTab(section);
 
   useEffect(() => {
+    const unsubscribe = subscribeOrders(() => {
+      const localOrders = loadLocalOrders();
+      setOrderRecords((current) => mergeOrderLists(localOrders, current.filter((order) => order.backendId)));
+      setOrderTimelineMap((current) => ({
+        ...current,
+        ...Object.fromEntries(localOrders.map((order) => [order.id, current[order.id] ?? createOrderTimelineSeed(order)])),
+      }));
+    });
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     if (!hasApiToken()) return;
 
     const catalogApi = createCatalogApi();
@@ -238,11 +264,16 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
 
     fetchOrders()
       .then((items) => {
-        setOrderRecords(items);
-        setOrderTimelineMap(Object.fromEntries(items.map((order) => [order.id, createOrderTimelineSeed(order)])));
+        const nextOrders = mergeOrderLists(loadLocalOrders(), items);
+        setOrderRecords(nextOrders);
+        setOrderTimelineMap(Object.fromEntries(nextOrders.map((order) => [order.id, createOrderTimelineSeed(order)])));
       })
       .catch(() => {
-        // Keep bundled demo orders available when backend is offline.
+        const localOrders = loadLocalOrders();
+        if (localOrders.length > 0) {
+          setOrderRecords(localOrders);
+          setOrderTimelineMap(Object.fromEntries(localOrders.map((order) => [order.id, createOrderTimelineSeed(order)])));
+        }
       });
 
     fetchDraftOrders()
@@ -301,6 +332,9 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
 
   const mergeOrderRecord = (updatedOrder: Order) => {
     setOrderRecords((current) => current.map((order) => (order.id === updatedOrder.id ? updatedOrder : order)));
+    if (!updatedOrder.backendId) {
+      updateLocalOrder(updatedOrder);
+    }
   };
 
   const updateOrderLocally = (currentOrder: Order, patch: Partial<Pick<Order, 'paymentStatus' | 'settlementStatus' | 'fulfillmentStatus'>> & {
@@ -362,6 +396,7 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
     }
 
     setOrderRecords((current) => current.filter((order) => !selectedOrderIds.includes(order.id)));
+    removeLocalOrders(selectedOrderIds);
     setOrderTimelineMap((current) => {
       const next = { ...current };
       selectedOrderIds.forEach((id) => {
