@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Loader2, Minus, PackageCheck, Plus, Search, ShoppingBag, ShoppingCart, Truck } from 'lucide-react';
 import { fetchPublicOrder, fetchPublicStorefront, submitPublicCheckout, type PublicOrder, type PublicStorefront } from '../../api/storefront';
 import { buildPublicStorefrontViewModel, type PublicStorefrontProductCard } from './publicStorefrontViewModel';
+import { buildPreviewStorefrontFallback } from './publicStorefrontFallback';
 
 interface CartLine {
   product: PublicStorefrontProductCard;
@@ -51,7 +52,15 @@ export function PublicStorefrontRuntime({
         setStatus('ready');
       })
       .catch(() => {
-        if (isMounted) {
+        if (!isMounted) {
+          return;
+        }
+
+        const fallback = buildPreviewStorefrontFallback(store);
+        if (fallback) {
+          setStorefront(fallback);
+          setStatus('ready');
+        } else {
           setStatus('error');
         }
       });
