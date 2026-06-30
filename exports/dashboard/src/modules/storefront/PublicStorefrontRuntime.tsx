@@ -5,6 +5,7 @@ import { buildPublicStorefrontViewModel, type PublicStorefrontProductCard } from
 import { buildPreviewStorefrontFallback } from './publicStorefrontFallback';
 import { getPublishedTheme } from '../websiteBuilder/themeLibraryStore';
 import { buildPublicStorefrontThemeRuntime, type PublicStorefrontThemeRuntime } from './publicStorefrontTheme';
+import { loadBuilderHomepageState, type BuilderHomepageSection } from '../websiteBuilder/builderHomepageStore';
 
 interface CartLine {
   product: PublicStorefrontProductCard;
@@ -106,6 +107,7 @@ export function PublicStorefrontRuntime({
     () => (viewModel ? buildPublicStorefrontThemeRuntime(liveTheme, viewModel) : null),
     [liveTheme, viewModel],
   );
+  const homepageSections = useMemo(() => loadBuilderHomepageState(liveTheme.id).sections.filter((section) => section.enabled), [liveTheme.id]);
   const selectedProduct = viewModel?.products.find((product) => product.slug === productSlug);
   const featuredProduct = selectedProduct ?? viewModel?.products[0];
   const subtotal = cart.reduce((sum, line) => {
@@ -202,6 +204,21 @@ export function PublicStorefrontRuntime({
           </a>
         </section>
       </div>
+    );
+  }
+
+  if (!selectedProduct) {
+    return (
+      <PublicStorefrontHomepage
+        featuredProduct={featuredProduct}
+        products={viewModel.products}
+        sections={homepageSections}
+        store={store}
+        storefront={storefront}
+        themeRuntime={themeRuntime}
+        viewModel={viewModel}
+        onAddToCart={addToCart}
+      />
     );
   }
 
@@ -434,6 +451,202 @@ export function PublicStorefrontRuntime({
         </aside>
       </section>
     </main>
+  );
+}
+
+function PublicStorefrontHomepage({
+  featuredProduct,
+  onAddToCart,
+  products,
+  sections,
+  store,
+  storefront,
+  themeRuntime,
+  viewModel,
+}: {
+  featuredProduct: PublicStorefrontProductCard;
+  onAddToCart: (product: PublicStorefrontProductCard) => void;
+  products: PublicStorefrontProductCard[];
+  sections: BuilderHomepageSection[];
+  store: string;
+  storefront: PublicStorefront | null;
+  themeRuntime: PublicStorefrontThemeRuntime;
+  viewModel: NonNullable<ReturnType<typeof buildPublicStorefrontViewModel>>;
+}) {
+  const storeSlug = storefront?.store.slug ?? store;
+
+  return (
+    <main className={themeRuntime.shellClassName}>
+      <header className={themeRuntime.headerClassName}>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <a className="flex min-w-0 items-center gap-3" href={`#/store/${storeSlug}`}>
+            <span className={themeRuntime.logoClassName}>{viewModel.brandName.slice(0, 2).toUpperCase()}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">{viewModel.brandName}</span>
+              <span className="block truncate text-xs text-slate-500">{viewModel.domainLabel}</span>
+            </span>
+          </a>
+          <div className="flex items-center gap-3">
+            <span className="hidden text-sm text-slate-500 sm:inline">{viewModel.productCountLabel}</span>
+            <a className="rounded border border-black/10 px-3 py-2 text-sm hover:bg-white/50" href="#/login">
+              Seller login
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="space-y-8">
+          {sections.map((section) => (
+            <HomepageSection
+              featuredProduct={featuredProduct}
+              key={section.id}
+              onAddToCart={onAddToCart}
+              products={products}
+              section={section}
+              themeRuntime={themeRuntime}
+              viewModel={viewModel}
+            />
+          ))}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function HomepageSection({
+  featuredProduct,
+  onAddToCart,
+  products,
+  section,
+  themeRuntime,
+  viewModel,
+}: {
+  featuredProduct: PublicStorefrontProductCard;
+  onAddToCart: (product: PublicStorefrontProductCard) => void;
+  products: PublicStorefrontProductCard[];
+  section: BuilderHomepageSection;
+  themeRuntime: PublicStorefrontThemeRuntime;
+  viewModel: NonNullable<ReturnType<typeof buildPublicStorefrontViewModel>>;
+}) {
+  if (section.kind === 'hero') {
+    return (
+      <article className={themeRuntime.heroClassName}>
+        <div className={themeRuntime.heroGridClassName}>
+          <div className="flex min-h-[460px] flex-col justify-center p-6 sm:p-10">
+            <p className={themeRuntime.eyebrowClassName}>{section.label}</p>
+            <h1 className={themeRuntime.headingClassName}>{section.content.heading || viewModel.brandName}</h1>
+            <p className={themeRuntime.bodyClassName}>{section.content.description || viewModel.tagline}</p>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <a className={themeRuntime.buttonClassName} href={featuredProduct.href} style={{ backgroundColor: themeRuntime.accent }}>
+                {section.content.buttonText || 'Shop now'}
+              </a>
+              <span className="text-sm text-slate-500">{viewModel.productCountLabel}</span>
+            </div>
+          </div>
+          <ProductImage product={featuredProduct} accentColor={viewModel.theme.accentColor} isHero themeRuntime={themeRuntime} />
+        </div>
+      </article>
+    );
+  }
+
+  if (section.kind === 'categories') {
+    const categories = Array.from(new Set(products.map((product) => product.categoryName).filter(Boolean))).slice(0, 6);
+
+    return (
+      <section className={themeRuntime.cardClassName}>
+        <div className="p-6 sm:p-8">
+          <p className={themeRuntime.eyebrowClassName}>{section.label}</p>
+          <h2 className="mt-3 font-serif text-3xl font-semibold">{section.content.heading}</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{section.content.description}</p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {(categories.length > 0 ? categories : ['All Products']).map((category) => (
+              <a key={category} className="border border-black/10 bg-white/70 px-4 py-4 text-sm font-medium hover:bg-white" href="#/store">
+                {category}
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (section.kind === 'featured-products') {
+    return (
+      <section>
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+          <div>
+            <p className={themeRuntime.eyebrowClassName}>{section.label}</p>
+            <h2 className="mt-2 font-serif text-3xl font-semibold">{section.content.heading || themeRuntime.collectionHeading}</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{section.content.description}</p>
+          </div>
+          <p className="text-sm text-slate-500">{viewModel.productCountLabel}</p>
+        </div>
+        <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {products.slice(0, 6).map((product) => (
+            <article key={product.id} className={themeRuntime.cardClassName}>
+              <a href={product.href}>
+                <ProductImage product={product} accentColor={viewModel.theme.accentColor} themeRuntime={themeRuntime} />
+              </a>
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{product.categoryName || product.vendor}</p>
+                    <a className="mt-2 block font-semibold hover:text-primary" href={product.href}>
+                      {product.title}
+                    </a>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold">{product.priceLabel}</span>
+                </div>
+                <button
+                  className="mt-4 rounded border border-black/10 px-3 py-2 text-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!product.isInStock}
+                  onClick={() => onAddToCart(product)}
+                  type="button"
+                >
+                  Add
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (section.kind === 'footer') {
+    return (
+      <footer className={themeRuntime.cardClassName}>
+        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1fr_1fr]">
+          <div>
+            <p className={themeRuntime.eyebrowClassName}>{section.label}</p>
+            <h2 className="mt-3 font-serif text-3xl font-semibold">{section.content.heading || viewModel.brandName}</h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">{section.content.description}</p>
+          </div>
+          <div className="grid content-end gap-2 text-sm text-slate-600 sm:grid-cols-2">
+            <a href="#/store">Home</a>
+            <a href="#/store">Collections</a>
+            <a href="#/login">Seller login</a>
+            <span>{viewModel.domainLabel}</span>
+          </div>
+        </div>
+      </footer>
+    );
+  }
+
+  return (
+    <section className={themeRuntime.cardClassName}>
+      <div className="p-6 text-center sm:p-10">
+        <p className={themeRuntime.eyebrowClassName}>{section.label}</p>
+        <h2 className="mt-3 font-serif text-3xl font-semibold">{section.content.heading}</h2>
+        <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">{section.content.description}</p>
+        {section.content.buttonText && (
+          <a className="mt-5 inline-flex border border-black/10 px-4 py-2 text-sm hover:bg-white" href={featuredProduct.href}>
+            {section.content.buttonText}
+          </a>
+        )}
+      </div>
+    </section>
   );
 }
 

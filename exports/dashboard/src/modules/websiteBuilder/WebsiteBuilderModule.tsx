@@ -51,6 +51,10 @@ import {
   websiteBuilderTabs,
   type WebsiteBuilderSection,
 } from './websiteBuilderSections';
+import {
+  loadBuilderHomepageState,
+  saveBuilderHomepageState,
+} from './builderHomepageStore';
 import { seoWorkspaceModes, type SeoWorkspaceScope } from './seoWorkspaceModes';
 import {
   type ThemeLibraryPreset,
@@ -2667,8 +2671,12 @@ function BuilderStudio({ theme }: { theme: ThemePreset }) {
   const [device, setDevice] = useState<DeviceMode>('desktop');
   const [editorTab, setEditorTab] = useState<EditorTab>('content');
   const [storePage, setStorePage] = useState<StorePageKey>('homepage');
-  const [sections, setSections] = useState<BuilderSectionItem[]>(defaultSectionsByTheme[theme.id] ?? defaultSectionsByTheme['luxe-atelier']);
-  const [activeSectionId, setActiveSectionId] = useState<string>((defaultSectionsByTheme[theme.id] ?? defaultSectionsByTheme['luxe-atelier'])[0].id);
+  const [sections, setSections] = useState<BuilderSectionItem[]>(
+    () => loadBuilderHomepageState(theme.id).sections as BuilderSectionItem[],
+  );
+  const [activeSectionId, setActiveSectionId] = useState<string>(
+    () => loadBuilderHomepageState(theme.id).sections[0].id,
+  );
   const [activeSurface, setActiveSurface] = useState<SurfaceTarget>('section');
   const [headerConfig, setHeaderConfig] = useState<HeaderConfig>({
     announcementEnabled: true,
@@ -2706,6 +2714,19 @@ function BuilderStudio({ theme }: { theme: ThemePreset }) {
   });
 
   const activeSection = sections.find((item) => item.id === activeSectionId) ?? sections[0];
+
+  useEffect(() => {
+    const savedState = loadBuilderHomepageState(theme.id);
+    setSections(savedState.sections as BuilderSectionItem[]);
+    setActiveSectionId(savedState.sections[0].id);
+  }, [theme.id]);
+
+  useEffect(() => {
+    saveBuilderHomepageState({
+      themeId: theme.id,
+      sections,
+    });
+  }, [sections, theme.id]);
 
   const handleSectionImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

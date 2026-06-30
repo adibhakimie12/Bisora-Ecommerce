@@ -127,6 +127,8 @@
 - Storefront preview route should fall back to cached admin catalog products when the public storefront API is not published yet, so seller preview can still render during backend rollout.
 - Public storefront runtime reads the Website Builder published theme from the theme library state; if no saved state exists, Luxe Atelier remains the default published theme.
 - Current storefront theme connection applies the live theme shell, header, hero, product cards, cart, buttons, and fallback branding. Full Builder Studio page sections, menus, footer, and page content are the next storefront phase.
+- Public storefront homepage route `#/store/[tenant-slug]` now renders enabled Builder Studio homepage sections for the published theme, falling back to theme-specific default sections when no edited section state exists.
+- Public storefront product route `#/store/[tenant-slug]/product/[product-slug]` remains product-detail focused with cart/checkout while homepage section wiring is completed first.
 - Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
 - Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
 - Marketing visible buttons now trigger working UI flows across overview, discounts, upsells, recovery, broadcasts, funnels, and automation builders
