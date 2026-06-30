@@ -100,7 +100,8 @@ export default function App() {
     }
 
     if (route.module === 'Products') {
-      return <ProductsModuleLazy section={route.section} id={route.id} subSection={route.subSection} />;
+      const activeTenant = session?.tenants.find((tenant) => tenant.id === session.activeTenantId) ?? session?.tenants[0];
+      return <ProductsModuleLazy activeTenant={activeTenant} section={route.section} id={route.id} subSection={route.subSection} />;
     }
 
     if (route.module === 'Customers') {

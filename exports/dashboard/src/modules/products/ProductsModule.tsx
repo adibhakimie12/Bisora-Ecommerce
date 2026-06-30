@@ -39,7 +39,9 @@ import { createCatalogApi } from '../../api/catalog';
 import { uploadMediaFile } from '../../api/media';
 import { ApiError } from '../../api/http';
 import { shouldUseDemoData } from '../../liveDataMode';
+import type { AdminTenantSession } from '../../api/authSession';
 import { buildCategoryMetrics } from './categoryMetrics';
+import { buildProductPreviewHash } from './productPreview';
 import { ProductStatusBadge } from './ProductStatusBadge';
 import {
   buildVariantOptionRepair,
@@ -53,6 +55,7 @@ interface ProductsModuleProps {
   section?: string;
   id?: string;
   subSection?: string;
+  activeTenant?: AdminTenantSession;
 }
 
 interface BannerState {
@@ -76,7 +79,11 @@ interface VariantOptionDraft {
 const productTabs: ProductTab[] = ['All Products', 'Inventory', 'Categories'];
 const categoryDetailTabs: CategoryDetailTab[] = ['Category', 'Category Products', 'SEO'];
 
-export function ProductsModule({ section, id, subSection }: ProductsModuleProps) {
+function openStorefrontProductPreview(product: Product, activeTenant?: AdminTenantSession) {
+  window.open(buildProductPreviewHash(product, activeTenant), '_blank', 'noopener,noreferrer');
+}
+
+export function ProductsModule({ section, id, subSection, activeTenant }: ProductsModuleProps) {
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [dialog, setDialog] = useState<ActionDialogState | null>(null);
   const [productRecords, setProductRecords] = useStorefrontProducts();
@@ -122,7 +129,7 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
         categoryOptions={categoryRecords}
         product={product}
         onDuplicate={() => showBanner('Product duplicated', `${product.title} was cloned into a new draft product.`)}
-        onPreview={() => showDialog('Preview prepared', `${product.title} preview is ready for storefront checking.`)}
+        onPreview={() => openStorefrontProductPreview(product, activeTenant)}
         productRecords={productRecords}
         onSave={(record, isNewProduct) => {
           const previousRecords = productRecords;
