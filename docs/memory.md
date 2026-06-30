@@ -131,6 +131,8 @@
 - Public storefront product route `#/store/[tenant-slug]/product/[product-slug]` remains product-detail focused with cart/checkout while homepage section wiring is completed first.
 - Public storefront checkout must create a seller-visible order even when the public checkout API is not reachable yet; local fallback orders are stored in `bisora-seller-orders`, deduct cached catalog stock, and appear in Seller Orders.
 - Buyer order tracking should first try the public order API, then fall back to the local seller order store for current rollout testing.
+- Seller Orders should display Malaysian Ringgit consistently for order totals, line items, draft totals, abandoned checkout values, and shipment/payment summaries.
+- Current seller order operations to test after checkout: open order detail, confirm manual payment, add manual tracking, mark shipped, and send tracking update. Courier automation remains a later integration phase.
 - Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
 - Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
 - Marketing visible buttons now trigger working UI flows across overview, discounts, upsells, recovery, broadcasts, funnels, and automation builders

@@ -36,6 +36,7 @@ import {
 import { createCatalogApi } from '../../api/catalog';
 import { orderKpiMetrics, orders } from './data';
 import { loadLocalOrders, removeLocalOrders, subscribeOrders, updateLocalOrder } from './orderStore';
+import { formatOrderMoney } from './ordersFormatting';
 import type { Order } from './types';
 import type { Product } from '../products/types';
 import { BulkShipmentModal } from './BulkShipmentModal';
@@ -900,7 +901,7 @@ function OrdersListPage({
     () =>
       orderKpiMetrics.map((metric) => {
         if (metric.label === 'Total Revenue') {
-          return { ...metric, value: `$${orders.reduce((sum, order) => sum + order.total, 0).toLocaleString('en-US')}` };
+          return { ...metric, value: formatOrderMoney(orders.reduce((sum, order) => sum + order.total, 0)) };
         }
         if (metric.label === 'Total Orders') return { ...metric, value: String(orders.length) };
         if (metric.label === 'Pending Fulfillment') {
@@ -1127,8 +1128,8 @@ function DraftOrdersPage({
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
                   <input className="w-full rounded border border-outline-variant/30 bg-surface px-9 py-2 text-sm" placeholder="Search products, collection, or SKU..." />
                 </label>
-                <LineItem imageUrl="https://picsum.photos/seed/lineitem-abaya/120/120" name="Silk Midnight Abaya" sku="ABY-LGC-097" quantity="1" price="$420" />
-                <LineItem imageUrl="https://picsum.photos/seed/lineitem-hijab/120/120" name="Premium Chiffon Hijab" sku="HJB-NJR-097" quantity="2" price="$110" />
+              <LineItem imageUrl="https://picsum.photos/seed/lineitem-abaya/120/120" name="Silk Midnight Abaya" sku="ABY-LGC-097" quantity="1" price={formatOrderMoney(420)} />
+              <LineItem imageUrl="https://picsum.photos/seed/lineitem-hijab/120/120" name="Premium Chiffon Hijab" sku="HJB-NJR-097" quantity="2" price={formatOrderMoney(110)} />
               </div>
 
               <div className="overflow-hidden rounded border border-outline-variant/20">
@@ -1167,7 +1168,7 @@ function DraftOrdersPage({
                             <span className="text-sm text-on-surface-variant">{draft.items} items</span>
                           </div>
                         </td>
-                        <td className="px-4 py-4 text-sm font-semibold">${draft.total.toLocaleString()}</td>
+                        <td className="px-4 py-4 text-sm font-semibold">{formatOrderMoney(draft.total)}</td>
                         <td className="px-4 py-4"><StatusBadge status={draft.status === 'Converted' ? 'Paid' : 'Pending'} /></td>
                         <td className="px-4 py-4">
                           <div className="flex flex-wrap gap-2">
@@ -1201,10 +1202,10 @@ function DraftOrdersPage({
         <aside className="space-y-6">
           <Panel title="Draft Summary">
             <div className="space-y-3">
-              <Info label="Subtotal" value="$530" />
-              <Info label="Shipping" value="$25" />
-              <Info label="Custom Adjustment" value="-$15" />
-              <Info label="Draft Total" value="$540" />
+              <Info label="Subtotal" value={formatOrderMoney(530)} />
+              <Info label="Shipping" value={formatOrderMoney(25)} />
+              <Info label="Custom Adjustment" value={`-${formatOrderMoney(15)}`} />
+              <Info label="Draft Total" value={formatOrderMoney(540)} />
             </div>
             <div className="mt-5 space-y-3">
               <button className="w-full rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim" onClick={onSendInvoice} type="button">
@@ -1250,7 +1251,7 @@ function AbandonedCheckoutsPage({
   return (
     <div className="space-y-4">
       <section className="grid gap-4 md:grid-cols-3">
-        <MetricCard label="Recoverable Revenue" value="$14,200" helper="+12.6% vs last month" />
+        <MetricCard label="Recoverable Revenue" value={formatOrderMoney(14200)} helper="+12.6% vs last month" />
         <MetricCard label="Recovery Rate" value="24%" helper="+3.1% vs last month" />
         <MetricCard label="Recovered Orders" value="42" helper="+8 new today" />
       </section>
@@ -1322,7 +1323,7 @@ function AbandonedCheckoutsPage({
                         <span className="text-xs text-on-surface-variant">{checkout.cartItems}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-sm font-semibold">${checkout.value.toLocaleString()}</td>
+                    <td className="px-4 py-4 text-sm font-semibold">{formatOrderMoney(checkout.value)}</td>
                     <td className="px-4 py-4"><StatusBadge status={checkout.status} /></td>
                     <td className="px-4 py-4 text-sm text-on-surface-variant">{checkout.updatedAt}</td>
                     <td className="px-4 py-4 text-right">
@@ -1379,8 +1380,8 @@ function AbandonedCheckoutsPage({
           </Panel>
           <Panel title="Recent Success">
             <div className="space-y-3 text-sm">
-              <p>Sarah recovered a cart worth $210.00</p>
-              <p>Hana recovered a cart worth $545.00</p>
+              <p>Sarah recovered a cart worth {formatOrderMoney(210)}</p>
+              <p>Hana recovered a cart worth {formatOrderMoney(545)}</p>
             </div>
           </Panel>
         </aside>
@@ -1406,7 +1407,7 @@ function AbandonedCheckoutsPage({
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <Info label="Customer" value={selectedCheckout.customer} />
               <Info label="Email" value={selectedCheckout.email} />
-              <Info label="Cart value" value={`$${selectedCheckout.value.toLocaleString()}`} />
+              <Info label="Cart value" value={formatOrderMoney(selectedCheckout.value)} />
               <Info label="Status" value={selectedCheckout.status} />
               <Info label="Updated" value={selectedCheckout.updatedAt} />
               <Info label="Items" value={`${selectedCheckout.cartItems} items`} />
@@ -1590,9 +1591,9 @@ function CreateNewOrderPage({
 
           <Panel title="Order Summary">
             <div className="space-y-3">
-              <Info label="Subtotal" value={`$${subtotal.toLocaleString()}`} />
-              <Info label="Shipping" value="$0" />
-              <Info label="Total" value={`$${subtotal.toLocaleString()}`} />
+              <Info label="Subtotal" value={formatOrderMoney(subtotal)} />
+              <Info label="Shipping" value={formatOrderMoney(0)} />
+              <Info label="Total" value={formatOrderMoney(subtotal)} />
               <Info label="Status" value="Pending payment" />
             </div>
           </Panel>
@@ -1721,7 +1722,7 @@ function OrdersTable({
                     </div>
                   </td>
                   <td className="px-4 py-4 text-sm text-on-surface-variant">{order.date}</td>
-                  <td className="px-4 py-4 text-sm font-semibold">${order.total.toLocaleString()}</td>
+                  <td className="px-4 py-4 text-sm font-semibold">{formatOrderMoney(order.total)}</td>
                   <td className="px-4 py-4"><StatusBadge status={order.paymentStatus} /></td>
                   <td className="px-4 py-4">
                     {order.paymentStatus === 'Paid' && order.settlementStatus ? (
@@ -1854,9 +1855,9 @@ function OrderDetailPage({
                   <div className="flex-1">
                     <p className="text-sm font-semibold">{item.name}</p>
                     <p className="text-xs text-on-surface-variant">{item.sku}</p>
-                    <p className="mt-2 text-sm text-on-surface-variant">Qty {item.quantity} x ${item.price.toLocaleString()}</p>
+                    <p className="mt-2 text-sm text-on-surface-variant">Qty {item.quantity} x {formatOrderMoney(item.price)}</p>
                   </div>
-                  <p className="text-sm font-semibold">${(item.quantity * item.price).toLocaleString()}</p>
+                  <p className="text-sm font-semibold">{formatOrderMoney(item.quantity * item.price)}</p>
                 </div>
               ))}
 
@@ -2146,7 +2147,7 @@ function OrderDetailPage({
                 <p className="text-xs uppercase tracking-wider text-on-surface-variant">Payment status</p>
                 <div className="mt-2"><StatusBadge status={order.paymentStatus} /></div>
               </div>
-              <Info label="Order total" value={`$${order.total.toLocaleString()}`} />
+              <Info label="Order total" value={formatOrderMoney(order.total)} />
               {order.paymentStatus === 'Pending' && (
                 <button
                   className="w-full rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-dim"
@@ -2431,7 +2432,7 @@ function ShipmentProcessingPage({
         <aside className="space-y-6">
           <Panel title="Fulfillment Summary">
             <div className="space-y-3">
-              <Info label="Order total" value={`$${order.total.toLocaleString()}`} />
+              <Info label="Order total" value={formatOrderMoney(order.total)} />
               <Info label="Items" value={`${order.items.length} lines`} />
               <Info label="Destination" value={order.shippingAddress.country} />
               <Info label="Weight" value={`${parcelProfile.weightKg.toFixed(1)} kg`} />
@@ -3013,7 +3014,7 @@ function LineItem({
         </div>
       </div>
       <Field label="Quantity" defaultValue={quantity} />
-      <Field label="Price" defaultValue={price.replace('$', '')} />
+      <Field label="Price" defaultValue={price} />
     </div>
   );
 }
