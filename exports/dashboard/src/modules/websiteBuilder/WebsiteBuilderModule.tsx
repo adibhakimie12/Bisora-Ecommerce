@@ -53,7 +53,6 @@ import {
 } from './websiteBuilderSections';
 import { seoWorkspaceModes, type SeoWorkspaceScope } from './seoWorkspaceModes';
 import {
-  themeLibraryPresets,
   type ThemeLibraryPreset,
 } from './themeLibrary';
 import {
@@ -62,6 +61,7 @@ import {
   publishThemeById,
   type ThemeLibraryCardModel,
 } from './themeLibraryViewModel';
+import { loadThemeLibrary, saveThemeLibrary } from './themeLibraryStore';
 import {
   backgroundStyleOptions,
   builderStudioThemeDefaults,
@@ -360,7 +360,7 @@ export function WebsiteBuilderModule({
   themeId?: string;
 }) {
   const activeSection = normalizeWebsiteBuilderSection(section);
-  const [themes, setThemes] = useState<ThemePreset[]>(themeLibraryPresets);
+  const [themes, setThemes] = useState<ThemePreset[]>(() => loadThemeLibrary());
   const [themeActionNote, setThemeActionNote] = useState<string>('Live theme flow is now active. Seller can install, customize, and publish themes with a clearer storefront state.');
   const publishedTheme = themes.find((theme) => theme.status === 'Published') ?? themes[0];
   const currentTheme = useMemo(
@@ -369,13 +369,21 @@ export function WebsiteBuilderModule({
   );
 
   const installTheme = (id: string) => {
-    setThemes((current) => installThemeById(current, id));
+    setThemes((current) => {
+      const nextThemes = installThemeById(current, id);
+      saveThemeLibrary(nextThemes);
+      return nextThemes;
+    });
     const installed = themes.find((theme) => theme.id === id);
     setThemeActionNote(`${installed?.name ?? 'Theme'} is now installed and ready to customize before going live.`);
   };
 
   const publishTheme = (id: string) => {
-    setThemes((current) => publishThemeById(current, id));
+    setThemes((current) => {
+      const nextThemes = publishThemeById(current, id);
+      saveThemeLibrary(nextThemes);
+      return nextThemes;
+    });
     const nextLive = themes.find((theme) => theme.id === id);
     setThemeActionNote(`${nextLive?.name ?? 'Theme'} is now the live storefront theme. Previous live theme stays installed as a backup draft path.`);
   };

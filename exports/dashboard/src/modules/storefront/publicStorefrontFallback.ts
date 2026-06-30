@@ -2,6 +2,7 @@ import { getStoredSession } from '../../api/authSession';
 import type { PublicStorefront } from '../../api/storefront';
 import { loadProducts } from './productStore';
 import type { Product } from '../products/types';
+import { getPublishedTheme } from '../websiteBuilder/themeLibraryStore';
 
 function slugify(value: string) {
   return value
@@ -33,6 +34,7 @@ export function buildPreviewStorefrontFallback(storeSlug: string, records: Produ
   const session = getStoredSession();
   const tenant = session?.tenants.find((item) => item.slug === storeSlug) ?? session?.tenants.find((item) => item.id === session.activeTenantId);
   const storeName = tenant?.name || storeSlug;
+  const liveTheme = getPublishedTheme();
 
   return {
     store: {
@@ -46,9 +48,9 @@ export function buildPreviewStorefrontFallback(storeSlug: string, records: Produ
       publishedUrl: '',
       branding: {
         brandName: storeName,
-        tagline: 'Preview storefront from saved catalog data.',
-        primaryColor: '#4f46e5',
-        accentColor: '#e0e7ff',
+        tagline: liveTheme.preview.heading || 'Preview storefront from saved catalog data.',
+        primaryColor: liveTheme.accent,
+        accentColor: liveTheme.accent,
         neutralColor: '#f8fafc',
       },
     },

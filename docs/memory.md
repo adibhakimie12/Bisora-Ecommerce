@@ -125,6 +125,8 @@
 - Product editor should not duplicate Options and Variants tabs; use one Variants tab for option groups, generated variant rows, stock, SKU, price, and variant images.
 - Product Preview should open the buyer-facing storefront product route in a new tab using the active tenant slug: `#/store/[tenant-slug]/product/[product-slug]`. Do not use a placeholder preview modal for saved products.
 - Storefront preview route should fall back to cached admin catalog products when the public storefront API is not published yet, so seller preview can still render during backend rollout.
+- Public storefront runtime reads the Website Builder published theme from the theme library state; if no saved state exists, Luxe Atelier remains the default published theme.
+- Current storefront theme connection applies the live theme shell, header, hero, product cards, cart, buttons, and fallback branding. Full Builder Studio page sections, menus, footer, and page content are the next storefront phase.
 - Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
 - Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
 - Marketing visible buttons now trigger working UI flows across overview, discounts, upsells, recovery, broadcasts, funnels, and automation builders

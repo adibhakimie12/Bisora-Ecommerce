@@ -3,6 +3,8 @@ import { ArrowLeft, Loader2, Minus, PackageCheck, Plus, Search, ShoppingBag, Sho
 import { fetchPublicOrder, fetchPublicStorefront, submitPublicCheckout, type PublicOrder, type PublicStorefront } from '../../api/storefront';
 import { buildPublicStorefrontViewModel, type PublicStorefrontProductCard } from './publicStorefrontViewModel';
 import { buildPreviewStorefrontFallback } from './publicStorefrontFallback';
+import { getPublishedTheme } from '../websiteBuilder/themeLibraryStore';
+import { buildPublicStorefrontThemeRuntime, type PublicStorefrontThemeRuntime } from './publicStorefrontTheme';
 
 interface CartLine {
   product: PublicStorefrontProductCard;
@@ -99,6 +101,11 @@ export function PublicStorefrontRuntime({
   }, [orderEmail, orderNumber, store]);
 
   const viewModel = useMemo(() => (storefront ? buildPublicStorefrontViewModel(storefront) : null), [storefront]);
+  const liveTheme = useMemo(() => getPublishedTheme(), []);
+  const themeRuntime = useMemo(
+    () => (viewModel ? buildPublicStorefrontThemeRuntime(liveTheme, viewModel) : null),
+    [liveTheme, viewModel],
+  );
   const selectedProduct = viewModel?.products.find((product) => product.slug === productSlug);
   const featuredProduct = selectedProduct ?? viewModel?.products[0];
   const subtotal = cart.reduce((sum, line) => {
@@ -181,7 +188,7 @@ export function PublicStorefrontRuntime({
     );
   }
 
-  if (status === 'error' || !viewModel || !featuredProduct) {
+  if (status === 'error' || !viewModel || !featuredProduct || !themeRuntime) {
     return (
       <div className="grid min-h-screen place-items-center bg-surface px-5 text-on-surface">
         <section className="max-w-md rounded border border-outline-variant/20 bg-surface-lowest p-6 text-center">
@@ -199,11 +206,11 @@ export function PublicStorefrontRuntime({
   }
 
   return (
-    <main className="min-h-screen bg-white text-slate-950" style={{ backgroundColor: viewModel.theme.neutralColor }}>
-      <header className="sticky top-0 z-20 border-b border-black/10 bg-white/90 backdrop-blur">
+    <main className={themeRuntime.shellClassName}>
+      <header className={themeRuntime.headerClassName}>
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <a className="flex min-w-0 items-center gap-3" href={`#/store/${storefront?.store.slug ?? store}`}>
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-950 text-sm font-semibold text-white">
+            <span className={themeRuntime.logoClassName}>
               {viewModel.brandName.slice(0, 2).toUpperCase()}
             </span>
             <span className="min-w-0">
@@ -233,8 +240,8 @@ export function PublicStorefrontRuntime({
             />
           )}
 
-          <article className="overflow-hidden rounded border border-black/10 bg-white">
-            <div className="grid lg:grid-cols-[1fr_0.95fr]">
+          <article className={themeRuntime.heroClassName}>
+            <div className={themeRuntime.heroGridClassName}>
               <div className="flex min-h-[420px] flex-col justify-center p-6 sm:p-10">
                 {selectedProduct && (
                   <a className="mb-6 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-950" href={`#/store/${storefront?.store.slug ?? store}`}>
@@ -242,19 +249,19 @@ export function PublicStorefrontRuntime({
                     Back to storefront
                   </a>
                 )}
-                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{selectedProduct ? featuredProduct.categoryName : 'Live Storefront'}</p>
-                <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-tight sm:text-5xl">
+                <p className={themeRuntime.eyebrowClassName}>{selectedProduct ? featuredProduct.categoryName : themeRuntime.productEyebrow}</p>
+                <h1 className={themeRuntime.headingClassName}>
                   {selectedProduct ? featuredProduct.title : viewModel.brandName}
                 </h1>
-                <p className="mt-4 max-w-xl text-base leading-7 text-slate-600">
+                <p className={themeRuntime.bodyClassName}>
                   {selectedProduct ? featuredProduct.description || viewModel.tagline : viewModel.tagline}
                 </p>
                 <div className="mt-6 flex flex-wrap items-center gap-3">
                   <button
-                    className="inline-flex items-center gap-2 rounded px-5 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    className={themeRuntime.buttonClassName}
                     disabled={!featuredProduct.isInStock}
                     onClick={() => addToCart(featuredProduct)}
-                    style={{ backgroundColor: viewModel.theme.primaryColor }}
+                    style={{ backgroundColor: themeRuntime.accent }}
                     type="button"
                   >
                     <ShoppingCart className="h-4 w-4" />
@@ -266,7 +273,7 @@ export function PublicStorefrontRuntime({
                   )}
                 </div>
               </div>
-              <ProductImage product={featuredProduct} accentColor={viewModel.theme.accentColor} isHero />
+              <ProductImage product={featuredProduct} accentColor={viewModel.theme.accentColor} isHero themeRuntime={themeRuntime} />
             </div>
           </article>
 
@@ -274,16 +281,16 @@ export function PublicStorefrontRuntime({
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
               <div>
                 <p className="text-sm text-slate-500">Collection</p>
-                <h2 className="mt-1 text-2xl font-semibold">Shop available products</h2>
+                <h2 className="mt-1 text-2xl font-semibold">{themeRuntime.collectionHeading}</h2>
               </div>
               <p className="text-sm text-slate-500">{viewModel.productCountLabel}</p>
             </div>
 
             <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {viewModel.products.map((product) => (
-                <article key={product.id} className="overflow-hidden rounded border border-black/10 bg-white">
+                <article key={product.id} className={themeRuntime.cardClassName}>
                   <a href={product.href}>
-                    <ProductImage product={product} accentColor={viewModel.theme.accentColor} />
+                    <ProductImage product={product} accentColor={viewModel.theme.accentColor} themeRuntime={themeRuntime} />
                   </a>
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -313,7 +320,7 @@ export function PublicStorefrontRuntime({
           </section>
         </div>
 
-        <aside className="h-fit rounded border border-black/10 bg-white p-5 lg:sticky lg:top-24">
+        <aside className={themeRuntime.cartClassName}>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-500">Cart</p>
@@ -323,10 +330,10 @@ export function PublicStorefrontRuntime({
           </div>
 
           <div className="mt-5 space-y-4">
-            {cart.length === 0 && <p className="rounded bg-slate-50 p-4 text-sm text-slate-500">Your cart is empty.</p>}
+            {cart.length === 0 && <p className={themeRuntime.emptyCartClassName}>Your cart is empty.</p>}
             {cart.map((line) => (
               <div key={line.product.id} className="flex gap-3">
-                <ProductImage product={line.product} accentColor={viewModel.theme.accentColor} isThumb />
+                <ProductImage product={line.product} accentColor={viewModel.theme.accentColor} isThumb themeRuntime={themeRuntime} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{line.product.title}</p>
                   <p className="mt-1 text-xs text-slate-500">{line.product.priceLabel}</p>
@@ -418,7 +425,7 @@ export function PublicStorefrontRuntime({
                 !checkoutForm.country.trim()
               }
               onClick={submitCheckout}
-              style={{ backgroundColor: viewModel.theme.primaryColor }}
+              style={{ backgroundColor: themeRuntime.accent }}
               type="button"
             >
               {checkoutStatus === 'submitting' ? 'Submitting order' : 'Place order'}
@@ -566,11 +573,13 @@ function ProductImage({
   accentColor,
   isHero = false,
   isThumb = false,
+  themeRuntime,
 }: {
   product: PublicStorefrontProductCard;
   accentColor: string;
   isHero?: boolean;
   isThumb?: boolean;
+  themeRuntime?: PublicStorefrontThemeRuntime;
 }) {
   const className = isThumb
     ? 'h-16 w-16 shrink-0 rounded object-cover'
@@ -583,7 +592,7 @@ function ProductImage({
   }
 
   return (
-    <div className={`${className} grid place-items-center`} style={{ backgroundColor: accentColor }}>
+    <div className={`${className} ${themeRuntime?.imageClassName ?? ''} grid place-items-center`} style={{ backgroundColor: accentColor }}>
       <ShoppingBag className={isThumb ? 'h-5 w-5 text-slate-600' : 'h-10 w-10 text-slate-600'} />
     </div>
   );
