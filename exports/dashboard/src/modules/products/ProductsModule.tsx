@@ -39,6 +39,7 @@ import { createCatalogApi } from '../../api/catalog';
 import { uploadMediaFile } from '../../api/media';
 import { ApiError } from '../../api/http';
 import { shouldUseDemoData } from '../../liveDataMode';
+import { buildCategoryMetrics } from './categoryMetrics';
 import { ProductStatusBadge } from './ProductStatusBadge';
 import {
   buildVariantOptionRepair,
@@ -202,7 +203,6 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
           });
           showBanner('Product added', `${availableProduct.title} was added to ${category.name}.`);
         }}
-        onChangeCoverImage={() => showDialog('Cover image manager', `${category.name} cover image upload will connect during the storage/backend phase.`)}
         onDelete={() => {
           setCategoryRecords((current) => current.filter((item) => item.id !== category.id));
           void createCatalogApi()
@@ -257,6 +257,7 @@ export function ProductsModule({ section, id, subSection }: ProductsModuleProps)
       <ProductsShell activeTab="Categories" banner={banner} onCreateProduct={() => (window.location.hash = '/products/edit/new')}>
         <CategoriesPage
           categories={categoryRecords}
+          products={productRecords}
           onCreateCategory={(category) => {
             setCategoryRecords((current) => [category, ...current]);
             void createCatalogApi()
@@ -983,10 +984,12 @@ function InventoryPage({
 
 function CategoriesPage({
   categories,
+  products,
   onCreateCategory,
   onViewAnalytics,
 }: {
   categories: Category[];
+  products: Product[];
   onCreateCategory: (category: Category) => void;
   onViewAnalytics: () => void;
 }) {
@@ -998,6 +1001,7 @@ function CategoriesPage({
     coverUrl: '',
   });
   const publishedCategories = categories.filter((category) => category.status === 'Published').length;
+  const categoryMetrics = useMemo(() => buildCategoryMetrics(categories, products), [categories, products]);
   const updateDraft = (field: keyof typeof draft, value: string) =>
     setDraft((current) => ({ ...current, [field]: value }));
   const canCreate = draft.name.trim().length > 1;
@@ -1040,8 +1044,8 @@ function CategoriesPage({
 
       <section className="grid gap-4 md:grid-cols-3">
         <MetricCard label="Total Categories" value={String(categories.length)} helper={`${publishedCategories} active collections`} />
-        <MetricCard label="Catalog Health" value="98%" helper="Ready for storefront browsing" />
-        <MetricCard label="Top Performing" value='"Abayas & Modest Wear"' helper="Highest traffic category" />
+        <MetricCard label="Catalog Health" value={categoryMetrics.catalogHealth} helper={categoryMetrics.catalogHealthHelper} />
+        <MetricCard label="Top Performing" value={categoryMetrics.topCategoryName} helper={categoryMetrics.topCategoryHelper} />
       </section>
 
       <section className="overflow-hidden rounded border border-outline-variant/20 bg-surface-lowest">
@@ -2828,7 +2832,6 @@ function CategoryDetailPage({
   products,
   activeTab,
   onAddProduct,
-  onChangeCoverImage,
   onPreview,
   onDelete,
   onRemoveProduct,
@@ -2838,13 +2841,13 @@ function CategoryDetailPage({
   products: Product[];
   activeTab: CategoryDetailTab;
   onAddProduct: () => void;
-  onChangeCoverImage: () => void;
   onPreview: () => void;
   onDelete: () => void;
   onRemoveProduct: (product: Product) => void;
   onSave: (category: Category) => void;
 }) {
   const [draft, setDraft] = useState(category);
+  const [coverUploadStatus, setCoverUploadStatus] = useState<'idle' | 'uploading' | 'error'>('idle');
 
   useEffect(() => {
     setDraft(category);
@@ -2852,6 +2855,29 @@ function CategoryDetailPage({
 
   const updateDraft = <K extends keyof Category>(key: K, value: Category[K]) => {
     setDraft((current) => ({ ...current, [key]: value }));
+  };
+  const handleCoverFileChange = async (files?: FileList | null) => {
+    const selectedFile = files?.[0];
+    if (!selectedFile || coverUploadStatus === 'uploading') {
+      return;
+    }
+
+    setCoverUploadStatus('uploading');
+    try {
+      const uploadedFile = await uploadMediaFile(selectedFile, {
+        ownerType: 'category',
+        ownerId: /^\d+$/.test(draft.id) ? draft.id : undefined,
+      });
+
+      if (!uploadedFile.publicUrl) {
+        throw new Error('Uploaded category cover did not return a public URL.');
+      }
+
+      updateDraft('coverUrl', uploadedFile.publicUrl);
+      setCoverUploadStatus('idle');
+    } catch {
+      setCoverUploadStatus('error');
+    }
   };
 
   return (
@@ -2898,7 +2924,14 @@ function CategoryDetailPage({
         ))}
       </div>
 
-      {activeTab === 'Category' && <CategorySettingsTab category={draft} onChange={updateDraft} onChangeCoverImage={onChangeCoverImage} />}
+      {activeTab === 'Category' && (
+        <CategorySettingsTab
+          category={draft}
+          coverUploadStatus={coverUploadStatus}
+          onChange={updateDraft}
+          onCoverFileChange={handleCoverFileChange}
+        />
+      )}
       {activeTab === 'Category Products' && <CategoryProductsTab category={draft} products={products} onAddProduct={onAddProduct} onRemoveProduct={onRemoveProduct} />}
       {activeTab === 'SEO' && <CategorySeoTab category={draft} onChange={updateDraft} />}
     </div>
@@ -2907,13 +2940,17 @@ function CategoryDetailPage({
 
 function CategorySettingsTab({
   category,
+  coverUploadStatus,
   onChange,
-  onChangeCoverImage,
+  onCoverFileChange,
 }: {
   category: Category;
+  coverUploadStatus: 'idle' | 'uploading' | 'error';
   onChange: <K extends keyof Category>(key: K, value: Category[K]) => void;
-  onChangeCoverImage: () => void;
+  onCoverFileChange: (files?: FileList | null) => void;
 }) {
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+
   return (
     <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <Panel title="General Information">
@@ -2941,9 +2978,26 @@ function CategorySettingsTab({
         </Panel>
         <Panel title="Category Preview">
           <img alt="" className="h-56 w-full rounded object-cover" referrerPolicy="no-referrer" src={category.coverUrl} />
-          <button className="mt-4 w-full rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low" onClick={onChangeCoverImage} type="button">
-            Change Cover Image
+          <input
+            ref={coverInputRef}
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={(event) => {
+              onCoverFileChange(event.currentTarget.files);
+              event.currentTarget.value = '';
+            }}
+            type="file"
+          />
+          <button
+            className="mt-4 w-full rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={coverUploadStatus === 'uploading'}
+            onClick={() => coverInputRef.current?.click()}
+            type="button"
+          >
+            {coverUploadStatus === 'uploading' ? 'Uploading cover...' : 'Change Cover Image'}
           </button>
+          {coverUploadStatus === 'error' && <p className="mt-2 text-xs text-error">Cover upload failed. Use JPG, PNG, WebP, or GIF under the media limit.</p>}
+          {coverUploadStatus === 'idle' && <p className="mt-2 text-xs text-on-surface-variant">Upload updates this preview. Press Save to publish the category cover.</p>}
         </Panel>
       </aside>
     </section>

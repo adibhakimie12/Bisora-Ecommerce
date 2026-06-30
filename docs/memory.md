@@ -120,6 +120,8 @@
 - Product variant images are grouped by Color when Color + Size variants exist, so Red S/M share Red images and Brown S/M share Brown images; save propagates the color image to every size variant in that color.
 - Product save flow should show the saved banner on the All Products list after backend save succeeds, not leave the seller inside the editor.
 - Inventory Grouped view should be hierarchical: product header, color group row, then size rows only after the color group is expanded.
+- Product category metrics must use live category/product data only; do not show fake hardcoded examples such as Abayas when the tenant has no Abaya products.
+- Category cover image changes use the real media upload flow and update the preview before the seller presses Save.
 - Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
 - Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
 - Marketing visible buttons now trigger working UI flows across overview, discounts, upsells, recovery, broadcasts, funnels, and automation builders
