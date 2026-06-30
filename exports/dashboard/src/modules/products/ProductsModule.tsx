@@ -1157,7 +1157,7 @@ function EditProductStudio({
   onDuplicate: () => void;
   onSave: (record: Product, isNewProduct: boolean) => void;
 }) {
-  const productEditorTabs = ['Item', 'Options', 'Variants', 'Images', 'Shipping', 'Categories', 'SEO'] as const;
+  const productEditorTabs = ['Item', 'Variants', 'Images', 'Shipping', 'Categories', 'SEO'] as const;
   const isNewProduct = product.id === 'prod-new-draft';
   const [form, setForm] = useState({
     title: product.title,
@@ -2173,14 +2173,14 @@ function EditProductStudio({
           </Panel>
           )}
 
-          {(isNewProduct || activeEditorTab === 'Options' || activeEditorTab === 'Variants') && (
+          {(isNewProduct || activeEditorTab === 'Variants') && (
           <Panel title="Variants">
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-3 rounded border border-outline-variant/20 bg-surface-low p-4">
                 <div>
-                  <p className="text-sm font-medium">Variant options</p>
+                  <p className="text-sm font-medium">Variant options and stock</p>
                   <p className="mt-1 text-xs text-on-surface-variant">
-                    Option name is the group, for example Color or Size. Add values like Pink, Brown, S, M, or 5 inside that group.
+                    Create choice groups like Color and Size here, then set SKU, price, and stock per generated variant row.
                   </p>
                 </div>
                 <button
