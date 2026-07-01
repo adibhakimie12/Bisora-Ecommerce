@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 
 import {
   buildShippingAddressMapUrl,
+  getSellerFulfillmentStages,
   getNextOpenOrderMenu,
   getShippedActionState,
   isPendingFulfillment,
+  mapOrderToSellerStage,
+  mapSellerStageToBadge,
 } from './orderDetailActions';
 
 test('getNextOpenOrderMenu keeps only one order detail menu open at a time', () => {
@@ -23,6 +26,20 @@ test('getShippedActionState disables shipped action after order is shipped', () 
     label: 'Already shipped',
     disabled: true,
   });
+});
+
+test('seller fulfillment stages use Delivered instead of Completed in the UI', () => {
+  assert.deepEqual(getSellerFulfillmentStages(), [
+    'Awaiting processing',
+    'Processing',
+    'Packed',
+    'Ready for pickup',
+    'Shipped',
+    'Delivered',
+  ]);
+  assert.equal(mapOrderToSellerStage('Delivered'), 'Delivered');
+  assert.equal(mapSellerStageToBadge('Delivered'), 'Delivered');
+  assert.equal(mapSellerStageToBadge('Completed'), 'Delivered');
 });
 
 test('isPendingFulfillment only counts orders that still need seller shipment work', () => {

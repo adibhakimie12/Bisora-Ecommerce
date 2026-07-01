@@ -39,10 +39,14 @@ import { loadLocalOrders, removeLocalOrders, subscribeOrders, updateLocalOrder }
 import { formatOrderMoney } from './ordersFormatting';
 import {
   buildShippingAddressMapUrl,
+  getSellerFulfillmentStages,
   getNextOpenOrderMenu,
   getShippedActionState,
   isPendingFulfillment,
+  mapOrderToSellerStage,
+  mapSellerStageToBadge,
   type OrderDetailMenu,
+  type SellerFulfillmentStage,
 } from './orderDetailActions';
 import type { Order } from './types';
 import type { Product } from '../products/types';
@@ -184,22 +188,7 @@ interface SendInvoiceDraft {
   email: string;
 }
 
-type SellerFulfillmentStage =
-  | 'Awaiting processing'
-  | 'Processing'
-  | 'Packed'
-  | 'Ready for pickup'
-  | 'Shipped'
-  | 'Completed';
-
-const sellerFulfillmentStages: SellerFulfillmentStage[] = [
-  'Awaiting processing',
-  'Processing',
-  'Packed',
-  'Ready for pickup',
-  'Shipped',
-  'Completed',
-];
+const sellerFulfillmentStages = getSellerFulfillmentStages();
 
 function hasApiToken() {
   if (typeof window === 'undefined') return false;
@@ -3043,38 +3032,6 @@ function normalizeOrdersTab(section?: string) {
   if (section === 'abandoned') return 'Abandoned Checkouts';
   if (section === 'new') return 'New Order';
   return 'All Orders';
-}
-
-function mapOrderToSellerStage(status: Order['fulfillmentStatus']): SellerFulfillmentStage {
-  switch (status) {
-    case 'Unfulfilled':
-      return 'Awaiting processing';
-    case 'Processing':
-      return 'Processing';
-    case 'Shipped':
-      return 'Shipped';
-    case 'Delivered':
-      return 'Completed';
-    default:
-      return 'Processing';
-  }
-}
-
-function mapSellerStageToBadge(stage: SellerFulfillmentStage): Order['fulfillmentStatus'] {
-  switch (stage) {
-    case 'Awaiting processing':
-      return 'Unfulfilled';
-    case 'Processing':
-    case 'Packed':
-    case 'Ready for pickup':
-      return 'Processing';
-    case 'Shipped':
-      return 'Shipped';
-    case 'Completed':
-      return 'Delivered';
-    default:
-      return 'Processing';
-  }
 }
 
 function formatTimelineTimestamp() {

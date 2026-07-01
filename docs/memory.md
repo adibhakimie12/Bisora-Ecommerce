@@ -137,6 +137,8 @@
 - Current seller order operations to test after checkout: open order detail, confirm manual payment, add manual tracking, mark shipped, and send tracking update. Courier automation remains a later integration phase.
 - Order detail action menus are exclusive now: opening Invoice, fulfillment stage, or More closes the previous menu so seller only sees one popup at a time.
 - Completed shipment actions are guarded: once an order is Shipped/Completed, Mark Shipped shows `Already shipped` and is disabled instead of adding duplicate timeline events.
+- Seller fulfillment stage dropdown should show `Delivered` instead of `Completed`; legacy `Completed` still maps to Delivered internally, but the live seller UI and buyer tracking use the same Delivered label.
+- Delivered is manual for now. Auto-delivered should only be added after courier provider webhooks/API tracking are connected.
 - Pending Fulfillment KPI only counts orders that still need seller shipment work (`Unfulfilled` or `Processing`), so shipped orders no longer stay in the pending count.
 - Shipping address map preview opens a Google Maps search from the buyer checkout address. This is not live GPS tracking; courier/provider tracking remains a later integration.
 - Invoice menu currently supports prepared UI actions (`Email invoice`, `Download PDF`) but real email delivery still depends on connecting the notification provider/SMTP.
