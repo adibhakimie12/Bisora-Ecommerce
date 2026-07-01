@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getOrdersAttentionCount } from './orderNotifications';
+import { buildSellerOrderNotifications, getOrdersAttentionCount, getUnreadSellerNotificationCount } from './orderNotifications';
 import type { Order } from './types';
 
 function createOrder(id: string, fulfillmentStatus: Order['fulfillmentStatus'], paymentStatus: Order['paymentStatus'] = 'Paid'): Order {
@@ -51,4 +51,28 @@ test('getOrdersAttentionCount counts only orders needing seller action', () => {
     ]),
     2,
   );
+});
+
+test('buildSellerOrderNotifications creates actionable order alerts', () => {
+  const notifications = buildSellerOrderNotifications([
+    createOrder('#ORD-1', 'Unfulfilled', 'Pending'),
+    createOrder('#ORD-2', 'Shipped', 'Paid'),
+  ]);
+
+  assert.deepEqual(
+    notifications.map((notification) => [notification.id, notification.title, notification.href, notification.read]),
+    [
+      ['#ORD-1:new-order', 'New order needs action', '#/orders/%23ORD-1', false],
+      ['#ORD-2:shipped', 'Order shipped', '#/orders/%23ORD-2', false],
+      ['#ORD-2:payment-paid', 'Payment confirmed', '#/orders/%23ORD-2', false],
+      ['#ORD-2:tracking-saved', 'Tracking saved', '#/orders/%23ORD-2', false],
+    ],
+  );
+});
+
+test('getUnreadSellerNotificationCount ignores read notifications', () => {
+  const notifications = buildSellerOrderNotifications([createOrder('#ORD-1', 'Unfulfilled', 'Pending')], new Set(['#ORD-1:new-order']));
+
+  assert.equal(getUnreadSellerNotificationCount(notifications), 0);
+  assert.equal(notifications[0]?.read, true);
 });

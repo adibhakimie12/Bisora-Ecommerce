@@ -23,8 +23,9 @@ import {
   WebsiteBuilderModuleLazy,
 } from './moduleRegistry';
 import { categories } from './modules/products/data';
-import { getOrdersAttentionCount } from './modules/orders/orderNotifications';
+import { buildSellerOrderNotifications, getOrdersAttentionCount, getUnreadSellerNotificationCount } from './modules/orders/orderNotifications';
 import { loadLocalOrders, subscribeOrders } from './modules/orders/orderStore';
+import type { Order } from './modules/orders/types';
 import { resolveCanonicalPathFromHash, syncCanonicalUrl } from './modules/seo/canonical';
 import { useStorefrontProducts } from './modules/storefront/productStore';
 import { useStorefrontPages } from './modules/storefront/websitePagesStore';
@@ -51,13 +52,40 @@ const routeLabels = new Map([
   ['website-builder', 'Website Builder'],
 ]);
 
+const SELLER_NOTIFICATION_READ_STORAGE_KEY = 'bisora-seller-notification-read-ids';
+
+function loadReadSellerNotificationIds() {
+  if (typeof window === 'undefined') return new Set<string>();
+
+  const saved = window.localStorage.getItem(SELLER_NOTIFICATION_READ_STORAGE_KEY);
+  if (!saved) return new Set<string>();
+
+  try {
+    return new Set(JSON.parse(saved) as string[]);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function saveReadSellerNotificationIds(ids: Set<string>) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(SELLER_NOTIFICATION_READ_STORAGE_KEY, JSON.stringify([...ids]));
+}
+
 export default function App() {
   const [route, setRoute] = useState<AdminRoute>(() => parseRoute());
   const [session, setSession] = useState(() => getStoredSession());
   const [orderAttentionCount, setOrderAttentionCount] = useState(() => getOrdersAttentionCount(loadLocalOrders()));
+  const [ordersForAlerts, setOrdersForAlerts] = useState<Order[]>(() => loadLocalOrders());
+  const [readSellerNotificationIds, setReadSellerNotificationIds] = useState(() => loadReadSellerNotificationIds());
   const [productRecords] = useStorefrontProducts();
   const [pageRecords] = useStorefrontPages();
   const activeItem = route.module === 'Placeholder' ? route.label : route.module;
+  const sellerNotifications = useMemo(
+    () => buildSellerOrderNotifications(ordersForAlerts, readSellerNotificationIds),
+    [ordersForAlerts, readSellerNotificationIds],
+  );
+  const unreadSellerNotificationCount = getUnreadSellerNotificationCount(sellerNotifications);
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -72,7 +100,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const refreshOrderAttention = () => setOrderAttentionCount(getOrdersAttentionCount(loadLocalOrders()));
+    const refreshOrderAttention = () => {
+      const orders = loadLocalOrders();
+      setOrdersForAlerts(orders);
+      setOrderAttentionCount(getOrdersAttentionCount(orders));
+    };
     refreshOrderAttention();
     return subscribeOrders(refreshOrderAttention);
   }, []);
@@ -165,12 +197,38 @@ export default function App() {
     }
   };
 
+  const markSellerNotificationRead = (notificationId: string) => {
+    setReadSellerNotificationIds((current) => {
+      const next = new Set(current);
+      next.add(notificationId);
+      saveReadSellerNotificationIds(next);
+      return next;
+    });
+  };
+
+  const markAllSellerNotificationsRead = () => {
+    setReadSellerNotificationIds((current) => {
+      const next = new Set(current);
+      sellerNotifications.forEach((notification) => next.add(notification.id));
+      saveReadSellerNotificationIds(next);
+      return next;
+    });
+  };
+
   return (
     <div className="min-h-screen bg-surface text-on-surface">
       <Sidebar activeItem={activeItem} badges={{ Orders: orderAttentionCount }} />
 
       <div className="min-h-screen lg:pl-64">
-        <TopHeader session={session} onLogout={logout} onTenantChange={switchTenant} />
+        <TopHeader
+          notifications={sellerNotifications}
+          onLogout={logout}
+          onMarkAllNotificationsRead={markAllSellerNotificationsRead}
+          onNotificationClick={markSellerNotificationRead}
+          onTenantChange={switchTenant}
+          session={session}
+          unreadNotificationCount={unreadSellerNotificationCount}
+        />
 
         <main className="p-4 sm:p-6 lg:p-8">
           <Suspense fallback={<ModuleLoadingState module={route.module} />}>{content}</Suspense>

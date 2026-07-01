@@ -143,7 +143,8 @@
 - Shipping address map preview opens a Google Maps search from the buyer checkout address. This is not live GPS tracking; courier/provider tracking remains a later integration.
 - Seller sidebar Orders item now shows a badge count for orders needing seller action (`Unfulfilled` or `Processing`), so new/manual checkout orders are visible without opening the Orders page first.
 - Invoice menu `Download PDF` opens the printable invoice through a `blob:` document instead of writing to `about:blank`, so Chrome/Vercel should render the invoice content before seller saves as PDF. Real `Email invoice` delivery still depends on connecting the notification provider/SMTP.
-- Near-term rollout order: fix invoice print/download, then build basic in-app seller order notifications, then connect shipping settings/courier integration, then wire provider-backed email/WhatsApp notifications.
+- Seller notification bell now shows unread in-app order alerts from seller order data: new order needs action, payment confirmed, tracking saved, shipped, and delivered. Clicking an alert opens that order detail and marks the alert read; read state is stored locally for the current rollout.
+- Near-term rollout order: finish basic in-app seller order notifications, then connect shipping settings/courier integration, then wire provider-backed email/WhatsApp notifications.
 - Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
 - Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
 - Marketing visible buttons now trigger working UI flows across overview, discounts, upsells, recovery, broadcasts, funnels, and automation builders
