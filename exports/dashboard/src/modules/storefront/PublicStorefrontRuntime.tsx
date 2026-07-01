@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Loader2, Minus, PackageCheck, Plus, Search, ShoppingBag, ShoppingCart, Truck } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Loader2, MapPin, Minus, PackageCheck, Plus, Search, ShoppingBag, ShoppingCart, Truck } from 'lucide-react';
 import { fetchPublicOrder, fetchPublicStorefront, submitPublicCheckout, type PublicOrder, type PublicStorefront } from '../../api/storefront';
 import { buildPublicStorefrontViewModel, type PublicStorefrontProductCard } from './publicStorefrontViewModel';
 import { buildPreviewStorefrontFallback } from './publicStorefrontFallback';
@@ -7,6 +7,7 @@ import { getPublishedTheme } from '../websiteBuilder/themeLibraryStore';
 import { buildPublicStorefrontThemeRuntime, type PublicStorefrontThemeRuntime } from './publicStorefrontTheme';
 import { loadBuilderHomepageState, type BuilderHomepageSection } from '../websiteBuilder/builderHomepageStore';
 import { createLocalCheckoutOrder, findLocalPublicOrder } from '../orders/checkoutOrderBridge';
+import { buildPublicOrderTrackingModel, shouldShowOrderTrackingPage } from './publicOrderTracking';
 
 interface CartLine {
   product: PublicStorefrontProductCard;
@@ -215,6 +216,21 @@ export function PublicStorefrontRuntime({
           </a>
         </section>
       </div>
+    );
+  }
+
+  if (shouldShowOrderTrackingPage(orderNumber)) {
+    return (
+      <PublicOrderTrackingPage
+        email={orderEmail}
+        order={trackedOrder}
+        orderNumber={orderNumber ?? ''}
+        status={trackStatus}
+        storeSlug={storefront?.store.slug ?? store}
+        storefront={storefront}
+        themeRuntime={themeRuntime}
+        viewModel={viewModel}
+      />
     );
   }
 
@@ -525,6 +541,57 @@ function PublicStorefrontHomepage({
   );
 }
 
+function PublicOrderTrackingPage({
+  email,
+  order,
+  orderNumber,
+  status,
+  storeSlug,
+  storefront,
+  themeRuntime,
+  viewModel,
+}: {
+  email?: string;
+  order: PublicOrder | null;
+  orderNumber: string;
+  status: 'idle' | 'loading' | 'error';
+  storeSlug: string;
+  storefront: PublicStorefront | null;
+  themeRuntime: PublicStorefrontThemeRuntime;
+  viewModel: NonNullable<ReturnType<typeof buildPublicStorefrontViewModel>>;
+}) {
+  return (
+    <main className={themeRuntime.shellClassName}>
+      <header className={themeRuntime.headerClassName}>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <a className="flex min-w-0 items-center gap-3" href={`#/store/${storeSlug}`}>
+            <span className={themeRuntime.logoClassName}>{viewModel.brandName.slice(0, 2).toUpperCase()}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">{viewModel.brandName}</span>
+              <span className="block truncate text-xs text-slate-500">{viewModel.domainLabel}</span>
+            </span>
+          </a>
+          <a className="rounded border border-black/10 px-3 py-2 text-sm hover:bg-white/50" href="#/login">
+            Seller login
+          </a>
+        </div>
+      </header>
+
+      <section className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+        <OrderTrackingPanel
+          currency={storefront?.store.currency ?? 'MYR'}
+          email={email}
+          order={order}
+          orderNumber={orderNumber}
+          status={status}
+          storeSlug={storeSlug}
+          themeColor={viewModel.theme.primaryColor}
+        />
+      </section>
+    </main>
+  );
+}
+
 function HomepageSection({
   featuredProduct,
   onAddToCart,
@@ -662,6 +729,7 @@ function HomepageSection({
 }
 
 function OrderTrackingPanel({
+  currency,
   email,
   order,
   orderNumber,
@@ -669,6 +737,7 @@ function OrderTrackingPanel({
   storeSlug,
   themeColor,
 }: {
+  currency?: string;
   email?: string;
   order: PublicOrder | null;
   orderNumber: string;
@@ -701,30 +770,24 @@ function OrderTrackingPanel({
     );
   }
 
-  const steps = [
-    { label: 'Order received', active: true },
-    { label: 'Payment', active: order.paymentStatus === 'paid' },
-    { label: 'Processing', active: ['processing', 'shipped', 'delivered'].includes(order.fulfillmentStatus) },
-    { label: 'Shipped', active: ['shipped', 'delivered'].includes(order.fulfillmentStatus) },
-    { label: 'Delivered', active: order.fulfillmentStatus === 'delivered' },
-  ];
+  const tracking = buildPublicOrderTrackingModel(order, { currency: currency ?? 'MYR', storeSlug });
 
   return (
     <section className="rounded border border-black/10 bg-white p-5">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div>
           <p className="text-sm text-slate-500">Order tracking</p>
-          <h1 className="mt-1 text-2xl font-semibold">{order.number}</h1>
+          <h1 className="mt-1 text-2xl font-semibold">{tracking.orderLabel}</h1>
           <p className="mt-2 text-sm text-slate-500">{order.customer.email}</p>
         </div>
-        <a className="inline-flex items-center gap-2 rounded border border-black/10 px-3 py-2 text-sm hover:bg-slate-50" href={`#/store/${storeSlug}`}>
+        <a className="inline-flex items-center gap-2 rounded border border-black/10 px-3 py-2 text-sm hover:bg-slate-50" href={tracking.backToStoreHref}>
           <Search className="h-4 w-4" />
           Continue shopping
         </a>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-5">
-        {steps.map((step) => (
+        {tracking.steps.map((step) => (
           <div key={step.label} className={`rounded border p-3 text-sm ${step.active ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-black/10 bg-slate-50 text-slate-500'}`}>
             <PackageCheck className="mb-2 h-4 w-4" />
             {step.label}
@@ -735,20 +798,64 @@ function OrderTrackingPanel({
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         <TrackingInfo label="Payment" value={order.paymentStatus} />
         <TrackingInfo label="Fulfillment" value={order.fulfillmentStatus} />
-        <TrackingInfo label="Total" value={`MYR ${order.total.toFixed(2)}`} />
+        <TrackingInfo label="Total" value={tracking.totalLabel} />
       </div>
 
-      <div className="mt-5 rounded border border-black/10 bg-slate-50 p-4">
-        <div className="flex items-start gap-3">
+      <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,1.3fr)_minmax(240px,0.7fr)]">
+        <div className="rounded border border-black/10 bg-slate-50 p-4">
+          <div className="flex items-start gap-3">
+            <Truck className="mt-0.5 h-5 w-5" style={{ color: themeColor }} />
+            <div>
+              <p className="text-sm font-semibold">Shipment</p>
+              <p className="mt-1 text-sm text-slate-600">{tracking.shipmentLabel}</p>
+              {order.shipment.trackingLocation && <p className="mt-1 text-xs text-slate-500">{order.shipment.trackingLocation}</p>}
+              {tracking.trackingUrl && (
+                <a className="mt-3 inline-flex items-center gap-1 text-xs font-semibold underline" href={tracking.trackingUrl} rel="noreferrer" target="_blank">
+                  Track parcel externally
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <a className="rounded border border-black/10 bg-slate-50 p-4 text-sm hover:bg-white" href={tracking.mapUrl} rel="noreferrer" target="_blank">
+          <div className="flex items-start gap-3">
+            <MapPin className="mt-0.5 h-5 w-5" style={{ color: themeColor }} />
+            <div>
+              <p className="font-semibold">Shipping area</p>
+              <p className="mt-1 text-slate-600">{order.shippingAddress.city || order.shippingAddress.country || 'Address saved'}</p>
+              <p className="mt-3 inline-flex items-center gap-1 text-xs font-semibold underline">
+                Open map search
+                <ExternalLink className="h-3 w-3" />
+              </p>
+            </div>
+          </div>
+        </a>
+      </div>
+
+      <div className="mt-5 rounded border border-black/10 bg-white p-4">
+        <p className="text-sm font-semibold">Items</p>
+        <div className="mt-3 divide-y divide-black/10">
+          {order.items.map((item) => (
+            <div className="flex items-center justify-between gap-4 py-3 text-sm" key={`${item.sku}-${item.name}`}>
+              <div>
+                <p className="font-medium">{item.name}</p>
+                <p className="text-xs text-slate-500">{item.sku} · Qty {item.quantity}</p>
+              </div>
+              <p className="font-semibold">{currency?.toUpperCase() === 'MYR' ? 'RM' : currency} {(item.price * item.quantity).toFixed(2)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5 rounded border border-black/10 bg-white p-4">
+        <p className="text-sm font-semibold">Shipping address</p>
+        <div className="mt-3 flex items-start gap-3 text-sm text-slate-600">
           <Truck className="mt-0.5 h-5 w-5" style={{ color: themeColor }} />
           <div>
-            <p className="text-sm font-semibold">Shipment</p>
-            <p className="mt-1 text-sm text-slate-600">
-              {order.shipment.trackingNumber
-                ? `${order.shipment.courier || 'Courier'} tracking ${order.shipment.trackingNumber}`
-                : 'Tracking will appear here once the seller ships the order.'}
-            </p>
-            {order.shipment.trackingLocation && <p className="mt-1 text-xs text-slate-500">{order.shipment.trackingLocation}</p>}
+            <p>{order.shippingAddress.recipient}</p>
+            <p>{[order.shippingAddress.city, order.shippingAddress.country].filter(Boolean).join(', ')}</p>
           </div>
         </div>
       </div>

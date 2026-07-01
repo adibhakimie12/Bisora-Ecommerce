@@ -131,6 +131,8 @@
 - Public storefront product route `#/store/[tenant-slug]/product/[product-slug]` remains product-detail focused with cart/checkout while homepage section wiring is completed first.
 - Public storefront checkout must create a seller-visible order even when the public checkout API is not reachable yet; local fallback orders are stored in `bisora-seller-orders`, deduct cached catalog stock, and appear in Seller Orders.
 - Buyer order tracking should first try the public order API, then fall back to the local seller order store for current rollout testing.
+- Buyer order tracking route `#/store/[tenant-slug]/orders/[order-number]?email=[buyer-email]` now renders a standalone customer tracking page before homepage/product routing, so the `Track this order` checkout link opens the actual order state.
+- Buyer tracking page shows payment status, fulfillment progress, order items, total, courier/tracking number, external courier search link, and shipping-area Google Maps search from saved address data. This is still map/search context, not live GPS courier tracking.
 - Seller Orders should display Malaysian Ringgit consistently for order totals, line items, draft totals, abandoned checkout values, and shipment/payment summaries.
 - Current seller order operations to test after checkout: open order detail, confirm manual payment, add manual tracking, mark shipped, and send tracking update. Courier automation remains a later integration phase.
 - Order detail action menus are exclusive now: opening Invoice, fulfillment stage, or More closes the previous menu so seller only sees one popup at a time.
