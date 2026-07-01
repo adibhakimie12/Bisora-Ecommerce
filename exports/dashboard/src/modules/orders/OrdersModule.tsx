@@ -37,6 +37,13 @@ import { createCatalogApi } from '../../api/catalog';
 import { orderKpiMetrics, orders } from './data';
 import { loadLocalOrders, removeLocalOrders, subscribeOrders, updateLocalOrder } from './orderStore';
 import { formatOrderMoney } from './ordersFormatting';
+import {
+  buildShippingAddressMapUrl,
+  getNextOpenOrderMenu,
+  getShippedActionState,
+  isPendingFulfillment,
+  type OrderDetailMenu,
+} from './orderDetailActions';
 import type { Order } from './types';
 import type { Product } from '../products/types';
 import { BulkShipmentModal } from './BulkShipmentModal';
@@ -905,7 +912,7 @@ function OrdersListPage({
         }
         if (metric.label === 'Total Orders') return { ...metric, value: String(orders.length) };
         if (metric.label === 'Pending Fulfillment') {
-          return { ...metric, value: String(orders.filter((order) => order.fulfillmentStatus !== 'Delivered').length) };
+          return { ...metric, value: String(orders.filter((order) => isPendingFulfillment(order.fulfillmentStatus)).length) };
         }
         return metric;
       }),
@@ -1780,14 +1787,15 @@ function OrderDetailPage({
   onDownloadInvoice: () => void;
   onSendTrackingUpdate: () => void;
 }) {
-  const [invoiceMenuOpen, setInvoiceMenuOpen] = useState(false);
-  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
-  const [headerMoreMenuOpen, setHeaderMoreMenuOpen] = useState(false);
-  const [actionMoreMenuOpen, setActionMoreMenuOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<OrderDetailMenu>();
   const parcelProfile = deriveOrderParcelProfile(order);
+  const shippedActionState = getShippedActionState(fulfillmentStage);
+  const shippingAddressMapUrl = buildShippingAddressMapUrl(order.shippingAddress);
   const trackingSearchUrl = manualTracking
     ? manualTracking.trackingUrl?.trim() || `https://www.google.com/search?q=${encodeURIComponent(manualTracking.courierName + ' tracking ' + manualTracking.trackingNumber)}`
     : '';
+  const toggleMenu = (menu: OrderDetailMenu) => setOpenMenu((current) => getNextOpenOrderMenu(menu, current));
+  const closeMenu = () => setOpenMenu(undefined);
 
   return (
     <div className="space-y-6">
@@ -1810,17 +1818,17 @@ function OrderDetailPage({
           <div className="relative">
             <button
               className="inline-flex items-center gap-2 rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low"
-              onClick={() => setHeaderMoreMenuOpen((current) => !current)}
+              onClick={() => toggleMenu('headerMore')}
               type="button"
             >
               More
             </button>
-            {headerMoreMenuOpen && (
+            {openMenu === 'headerMore' && (
               <div className="absolute right-0 top-full z-10 mt-2 w-52 rounded border border-outline-variant/20 bg-white p-2 shadow-lg">
                 <button
                   className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-surface-low"
                   onClick={() => {
-                    setHeaderMoreMenuOpen(false);
+                    closeMenu();
                     onManualTracking();
                   }}
                   type="button"
@@ -1831,7 +1839,7 @@ function OrderDetailPage({
                 <button
                   className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-surface-low"
                   onClick={() => {
-                    setHeaderMoreMenuOpen(false);
+                    closeMenu();
                     onGenerateShipment(order.id);
                   }}
                   type="button"
@@ -1865,17 +1873,17 @@ function OrderDetailPage({
                 <div className="relative">
                   <button
                     className="inline-flex items-center gap-2 rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low"
-                    onClick={() => setInvoiceMenuOpen((current) => !current)}
+                    onClick={() => toggleMenu('invoice')}
                     type="button"
                   >
                     Invoice
                   </button>
-                  {invoiceMenuOpen && (
+                  {openMenu === 'invoice' && (
                     <div className="absolute right-0 top-full z-10 mt-2 w-44 rounded border border-outline-variant/20 bg-white p-2 shadow-lg">
                       <button
                         className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-surface-low"
                         onClick={() => {
-                          setInvoiceMenuOpen(false);
+                          closeMenu();
                           onSendInvoice();
                         }}
                         type="button"
@@ -1886,7 +1894,7 @@ function OrderDetailPage({
                       <button
                         className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-surface-low"
                         onClick={() => {
-                          setInvoiceMenuOpen(false);
+                          closeMenu();
                           onDownloadInvoice();
                         }}
                         type="button"
@@ -1901,19 +1909,19 @@ function OrderDetailPage({
                 <div className="relative">
                   <button
                     className="inline-flex items-center gap-2 rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low"
-                    onClick={() => setStatusMenuOpen((current) => !current)}
+                    onClick={() => toggleMenu('status')}
                     type="button"
                   >
                     {fulfillmentStage}
                   </button>
-                  {statusMenuOpen && (
+                  {openMenu === 'status' && (
                     <div className="absolute right-0 top-full z-10 mt-2 w-56 rounded border border-outline-variant/20 bg-white p-2 shadow-lg">
                       {sellerFulfillmentStages.map((stage) => (
                         <button
                           key={stage}
                           className={`flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm hover:bg-surface-low ${stage === fulfillmentStage ? 'bg-surface-low font-medium text-primary' : ''}`}
                           onClick={() => {
-                            setStatusMenuOpen(false);
+                            closeMenu();
                             onUpdateFulfillmentStage(stage);
                           }}
                           type="button"
@@ -1937,17 +1945,17 @@ function OrderDetailPage({
                 <div className="relative">
                   <button
                     className="rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low"
-                    onClick={() => setActionMoreMenuOpen((current) => !current)}
+                    onClick={() => toggleMenu('more')}
                     type="button"
                   >
                     More
                   </button>
-                  {actionMoreMenuOpen && (
+                  {openMenu === 'more' && (
                     <div className="absolute right-0 top-full z-10 mt-2 w-44 rounded border border-outline-variant/20 bg-white p-2 shadow-lg">
                       <button
                         className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-surface-low"
                         onClick={() => {
-                          setActionMoreMenuOpen(false);
+                          closeMenu();
                           onManualTracking();
                         }}
                         type="button"
@@ -1959,7 +1967,7 @@ function OrderDetailPage({
                         className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-surface-low disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={!manualTracking}
                         onClick={() => {
-                          setActionMoreMenuOpen(false);
+                          closeMenu();
                           onSendTrackingUpdate();
                         }}
                         type="button"
@@ -1968,15 +1976,17 @@ function OrderDetailPage({
                         Send tracking to customer
                       </button>
                       <button
-                        className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-surface-low"
+                        className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-surface-low disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={shippedActionState.disabled}
                         onClick={() => {
-                          setActionMoreMenuOpen(false);
+                          closeMenu();
+                          if (shippedActionState.disabled) return;
                           onMarkShipped();
                         }}
                         type="button"
                       >
                         <Truck className="h-4 w-4" />
-                        Mark shipped
+                        {shippedActionState.label}
                       </button>
                     </div>
                   )}
@@ -2073,11 +2083,15 @@ function OrderDetailPage({
                   Print Waybill
                 </button>
                 <button
-                  className="rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low"
-                  onClick={onMarkShipped}
+                  className="rounded border border-outline-variant/30 px-4 py-2 text-sm hover:bg-surface-low disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={shippedActionState.disabled}
+                  onClick={() => {
+                    if (shippedActionState.disabled) return;
+                    onMarkShipped();
+                  }}
                   type="button"
                 >
-                  Mark Shipped
+                  {shippedActionState.label}
                 </button>
               </div>
             </div>
@@ -2102,12 +2116,17 @@ function OrderDetailPage({
                 <br />
                 {order.shippingAddress.city}, {order.shippingAddress.country}
               </address>
-              <div className="grid min-h-32 place-items-center rounded border border-dashed border-outline-variant/30 bg-surface-low text-center text-sm text-on-surface-variant">
+              <a
+                className="grid min-h-32 place-items-center rounded border border-dashed border-outline-variant/30 bg-surface-low text-center text-sm text-on-surface-variant hover:border-primary hover:text-primary"
+                href={shippingAddressMapUrl}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
                 <span className="flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  Map preview
+                  Open map
                 </span>
-              </div>
+              </a>
             </div>
           </Panel>
         </div>
@@ -2125,7 +2144,7 @@ function OrderDetailPage({
               <Info label="Tracking number" value={manualTracking ? manualTracking.trackingNumber : (order.shipment.trackingNumber ?? 'Pending generation')} />
               {manualTracking && (
                 <div className="rounded border border-outline-variant/20 bg-surface-low p-3">
-                  <p className="text-xs text-on-surface-variant">Manual tracking — check on courier website</p>
+                  <p className="text-xs text-on-surface-variant">Manual tracking - check on courier website</p>
                   <a
                     className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
                     href={trackingSearchUrl}

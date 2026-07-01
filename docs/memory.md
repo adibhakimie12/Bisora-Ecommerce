@@ -133,6 +133,11 @@
 - Buyer order tracking should first try the public order API, then fall back to the local seller order store for current rollout testing.
 - Seller Orders should display Malaysian Ringgit consistently for order totals, line items, draft totals, abandoned checkout values, and shipment/payment summaries.
 - Current seller order operations to test after checkout: open order detail, confirm manual payment, add manual tracking, mark shipped, and send tracking update. Courier automation remains a later integration phase.
+- Order detail action menus are exclusive now: opening Invoice, fulfillment stage, or More closes the previous menu so seller only sees one popup at a time.
+- Completed shipment actions are guarded: once an order is Shipped/Completed, Mark Shipped shows `Already shipped` and is disabled instead of adding duplicate timeline events.
+- Pending Fulfillment KPI only counts orders that still need seller shipment work (`Unfulfilled` or `Processing`), so shipped orders no longer stay in the pending count.
+- Shipping address map preview opens a Google Maps search from the buyer checkout address. This is not live GPS tracking; courier/provider tracking remains a later integration.
+- Invoice menu currently supports prepared UI actions (`Email invoice`, `Download PDF`) but real email delivery still depends on connecting the notification provider/SMTP.
 - Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
 - Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
 - Marketing visible buttons now trigger working UI flows across overview, discounts, upsells, recovery, broadcasts, funnels, and automation builders
