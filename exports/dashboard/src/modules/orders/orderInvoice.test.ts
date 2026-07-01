@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildInvoiceHtml } from './orderInvoice';
+import { buildInvoiceHtml, openInvoicePrintWindow } from './orderInvoice';
 import type { Order } from './types';
 
 const order: Order = {
@@ -50,4 +50,39 @@ test('buildInvoiceHtml renders printable invoice details safely', () => {
   assert.match(html, /NEW-SKU-001/);
   assert.match(html, /RM 49\.00/);
   assert.doesNotMatch(html, /Ahmad <Buyer>/);
+});
+
+test('openInvoicePrintWindow opens a blob invoice document instead of writing to about blank', () => {
+  const originalWindow = globalThis.window;
+  const originalUrl = globalThis.URL;
+  const openedUrls: string[] = [];
+  let revokedUrl = '';
+
+  globalThis.URL = {
+    ...originalUrl,
+    createObjectURL: () => 'blob:https://bisora-admin.test/invoice',
+    revokeObjectURL: (url: string) => {
+      revokedUrl = url;
+    },
+  } as unknown as typeof URL;
+
+  globalThis.window = {
+    open: (url: string) => {
+      openedUrls.push(url);
+      return {} as Window;
+    },
+    setTimeout: (callback: () => void) => {
+      callback();
+      return 1;
+    },
+  } as unknown as Window & typeof globalThis;
+
+  try {
+    assert.equal(openInvoicePrintWindow(order), true);
+    assert.deepEqual(openedUrls, ['blob:https://bisora-admin.test/invoice']);
+    assert.equal(revokedUrl, 'blob:https://bisora-admin.test/invoice');
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.URL = originalUrl;
+  }
 });

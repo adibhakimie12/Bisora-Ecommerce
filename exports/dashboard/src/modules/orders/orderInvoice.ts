@@ -118,12 +118,31 @@ export function buildInvoiceHtml(order: Order) {
 export function openInvoicePrintWindow(order: Order) {
   if (typeof window === 'undefined') return false;
 
-  const popup = window.open('', '_blank', 'noopener,noreferrer,width=900,height=1200');
+  const html = buildInvoiceHtml(order);
+
+  if (typeof Blob !== 'undefined' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const popup = window.open(url, '_blank');
+
+    if (!popup) {
+      URL.revokeObjectURL(url);
+      return false;
+    }
+
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return true;
+  }
+
+  const popup = window.open('', '_blank', 'width=900,height=1200');
   if (!popup) return false;
 
-  popup.document.open();
-  popup.document.write(buildInvoiceHtml(order));
-  popup.document.close();
-  popup.focus();
-  return true;
+  try {
+    popup.document.open();
+    popup.document.write(html);
+    popup.document.close();
+    popup.focus();
+    return true;
+  } catch {
+    return false;
+  }
 }
