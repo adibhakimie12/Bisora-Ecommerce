@@ -1,7 +1,7 @@
 import { navItems } from '../data';
 import { canAccessSuperadmin, getCurrentAdminEmail } from '../modules/superadmin/superadminAccess';
 
-export function Sidebar({ activeItem }: { activeItem: string }) {
+export function Sidebar({ activeItem, badges = {} }: { activeItem: string; badges?: Record<string, number> }) {
   const visibleNavItems = navItems.filter((item) => item.label !== 'Superadmin' || canAccessSuperadmin(getCurrentAdminEmail()));
 
   return (
@@ -26,6 +26,15 @@ export function Sidebar({ activeItem }: { activeItem: string }) {
           >
             <item.icon className="h-4 w-4" />
             <span>{item.label}</span>
+            {badges[item.label] ? (
+              <span
+                className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  item.label === activeItem ? 'bg-on-primary/20 text-on-primary' : 'bg-primary text-on-primary'
+                }`}
+              >
+                {badges[item.label]}
+              </span>
+            ) : null}
           </a>
         ))}
       </nav>

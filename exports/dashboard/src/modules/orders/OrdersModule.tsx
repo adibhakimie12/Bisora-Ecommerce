@@ -35,6 +35,7 @@ import {
 } from '../../api/commerce';
 import { createCatalogApi } from '../../api/catalog';
 import { orderKpiMetrics, orders } from './data';
+import { openInvoicePrintWindow } from './orderInvoice';
 import { loadLocalOrders, removeLocalOrders, subscribeOrders, updateLocalOrder } from './orderStore';
 import { formatOrderMoney } from './ordersFormatting';
 import {
@@ -550,15 +551,17 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
             });
           }}
           onDownloadInvoice={() => {
+            const opened = openInvoicePrintWindow(selectedOrder);
             appendTimelineEntry(selectedOrder.id, {
-              title: 'Invoice PDF prepared',
-              description: 'Seller opened the downloadable invoice copy for printing or manual sharing.',
+              title: opened ? 'Invoice PDF prepared' : 'Invoice window blocked',
+              description: opened
+                ? 'Seller opened the invoice print copy and can save it as PDF from the browser dialog.'
+                : 'Browser blocked the invoice print window. Seller should allow popups and try again.',
             });
-            openActionDialog({
-              title: 'Download invoice',
-              description: `Invoice PDF for ${selectedOrder.id} is ready for download.`,
-              confirmLabel: 'Done',
-            });
+            showBanner(
+              opened ? 'Invoice ready' : 'Invoice popup blocked',
+              opened ? `Invoice for ${selectedOrder.id} opened. Choose Save as PDF in the print dialog.` : 'Allow popups for Bisora, then click Download PDF again.',
+            );
           }
           }
           onSendTrackingUpdate={() => {

@@ -23,6 +23,8 @@ import {
   WebsiteBuilderModuleLazy,
 } from './moduleRegistry';
 import { categories } from './modules/products/data';
+import { getOrdersAttentionCount } from './modules/orders/orderNotifications';
+import { loadLocalOrders, subscribeOrders } from './modules/orders/orderStore';
 import { resolveCanonicalPathFromHash, syncCanonicalUrl } from './modules/seo/canonical';
 import { useStorefrontProducts } from './modules/storefront/productStore';
 import { useStorefrontPages } from './modules/storefront/websitePagesStore';
@@ -52,6 +54,7 @@ const routeLabels = new Map([
 export default function App() {
   const [route, setRoute] = useState<AdminRoute>(() => parseRoute());
   const [session, setSession] = useState(() => getStoredSession());
+  const [orderAttentionCount, setOrderAttentionCount] = useState(() => getOrdersAttentionCount(loadLocalOrders()));
   const [productRecords] = useStorefrontProducts();
   const [pageRecords] = useStorefrontPages();
   const activeItem = route.module === 'Placeholder' ? route.label : route.module;
@@ -66,6 +69,12 @@ export default function App() {
     window.addEventListener('hashchange', onHashChange);
 
     return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  useEffect(() => {
+    const refreshOrderAttention = () => setOrderAttentionCount(getOrdersAttentionCount(loadLocalOrders()));
+    refreshOrderAttention();
+    return subscribeOrders(refreshOrderAttention);
   }, []);
 
   useEffect(() => {
@@ -158,7 +167,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-surface text-on-surface">
-      <Sidebar activeItem={activeItem} />
+      <Sidebar activeItem={activeItem} badges={{ Orders: orderAttentionCount }} />
 
       <div className="min-h-screen lg:pl-64">
         <TopHeader session={session} onLogout={logout} onTenantChange={switchTenant} />

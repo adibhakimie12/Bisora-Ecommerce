@@ -141,7 +141,8 @@
 - Delivered is manual for now. Auto-delivered should only be added after courier provider webhooks/API tracking are connected.
 - Pending Fulfillment KPI only counts orders that still need seller shipment work (`Unfulfilled` or `Processing`), so shipped orders no longer stay in the pending count.
 - Shipping address map preview opens a Google Maps search from the buyer checkout address. This is not live GPS tracking; courier/provider tracking remains a later integration.
-- Invoice menu currently supports prepared UI actions (`Email invoice`, `Download PDF`) but real email delivery still depends on connecting the notification provider/SMTP.
+- Seller sidebar Orders item now shows a badge count for orders needing seller action (`Unfulfilled` or `Processing`), so new/manual checkout orders are visible without opening the Orders page first.
+- Invoice menu `Download PDF` now opens a printable invoice copy in a new window; seller can choose Save as PDF from the browser print dialog. Real `Email invoice` delivery still depends on connecting the notification provider/SMTP.
 - Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
 - Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
 - Marketing visible buttons now trigger working UI flows across overview, discounts, upsells, recovery, broadcasts, funnels, and automation builders
