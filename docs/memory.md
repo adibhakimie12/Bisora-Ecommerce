@@ -147,11 +147,13 @@
 - Seller notification drawer UX now has `All alerts` / `Unread only`, shows `No unread alerts` when badge is clear, and lets seller `Clear read` so old read alerts can be hidden without deleting future alerts.
 - Seller notification and profile dropdowns close when seller clicks outside the open menu, so the bell menu no longer requires clicking the bell again to dismiss.
 - Orders shipment setup, bulk shipment, and manual tracking should read enabled couriers from saved Settings courier progress (`settings.couriers`) instead of a hardcoded courier list. Settings also merges saved courier setup back into the Courier page after refresh.
-- Public storefront checkout now quotes a Malaysia shipping rate before order placement: Semenanjung uses the current seed flat rate, Sabah/Sarawak/Labuan use the East Malaysia rate, and configured free-shipping thresholds can reduce the fee to RM0.
+- Public storefront checkout now quotes a Malaysia shipping rate before order placement: saved tenant Shipping & Logistics zones (`settings.shipping.zones`) are used first, then the Semenanjung/East Malaysia seed flat rates are used as fallback. Configured free-shipping thresholds can reduce the fee to RM0.
+- Public storefront API exposes only public-safe shipping settings to checkout (`store.settings.shipping`) so buyers can see/select rates without leaking provider credentials or private setup data.
+- Backend public checkout accepts the selected shipping method, includes the shipping fee in the persisted order total, and stores courier/method/zone/shipping fee in shipment metadata for seller order detail, invoices, and later fulfillment.
 - Public checkout summary now shows subtotal, shipping, and total; local fallback seller orders store the selected shipping method/courier and include the shipping fee in the order total.
 - Seller order Payment Info and printable invoice show the shipping method/fee when present, so order totals match the buyer checkout summary.
-- Shipping-rate checkout is still flat-rate quoting only; actual courier API rate lookup, shipment purchase, waybill creation, and webhook-driven delivery updates remain the next shipping integration phase.
-- Near-term rollout order: finish basic in-app seller order notifications, then connect shipping settings/courier integration, then wire provider-backed email/WhatsApp notifications.
+- Shipping-rate checkout is still flat-rate quoting only; actual courier API rate lookup, shipment purchase, waybill creation, and webhook-driven delivery updates should plug into the same saved Shipping & Logistics setup.
+- Near-term rollout order: connect shipping settings/courier integration, then wire provider-backed email/WhatsApp notifications.
 - Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
 - Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
 - Marketing visible buttons now trigger working UI flows across overview, discounts, upsells, recovery, broadcasts, funnels, and automation builders

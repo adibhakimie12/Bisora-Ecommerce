@@ -13,6 +13,7 @@ function testMapsPublicStorefrontFromApi() {
       status: 'live',
       published_url: 'https://shop.live.test',
       branding: { brandName: 'Live Store', primaryColor: '#4f46e5' },
+      settings: { shipping: { zones: [{ id: 'custom-kl', name: 'Custom KL' }] } },
     },
     pages: [
       {
@@ -58,6 +59,7 @@ function testMapsPublicStorefrontFromApi() {
   assert.equal(storefront.blogPosts[0].slug, '/blog/published-blog');
   assert.equal(storefront.products[0].price, 129);
   assert.equal(storefront.products[0].category?.name, 'Scarves');
+  assert.equal(storefront.store.settings.shipping.zones[0].name, 'Custom KL');
 }
 
 async function testFetchPublicStorefrontUsesPublicEndpoint() {

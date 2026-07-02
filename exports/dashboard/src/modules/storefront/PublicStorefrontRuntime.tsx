@@ -130,8 +130,9 @@ export function PublicStorefrontRuntime({
       postcode: checkoutForm.postcode,
       country: checkoutForm.country,
       subtotal,
+      settings: storefront?.store.settings,
     }),
-    [checkoutForm.city, checkoutForm.country, checkoutForm.postcode, subtotal],
+    [checkoutForm.city, checkoutForm.country, checkoutForm.postcode, storefront?.store.settings, subtotal],
   );
   const selectedShipping = shippingOptions[0];
   const orderTotal = subtotal + (cart.length > 0 ? selectedShipping.amount : 0);

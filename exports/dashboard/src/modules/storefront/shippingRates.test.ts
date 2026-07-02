@@ -37,3 +37,29 @@ test('applies free shipping when subtotal reaches the configured threshold', () 
   assert.equal(option.amount, 0);
   assert.equal(option.isFree, true);
 });
+
+test('prefers saved tenant shipping zones over seed rates', () => {
+  const [option] = getCheckoutShippingOptions({
+    city: 'Kuala Lumpur',
+    country: 'Malaysia',
+    subtotal: 49,
+    settings: {
+      shipping: {
+        zones: [
+          {
+            id: 'custom-kl',
+            name: 'Custom KL',
+            regions: ['Kuala Lumpur'],
+            methods: ['Custom Courier'],
+            weightRates: [{ id: 'wr-custom', name: 'Custom Courier Same Day', range: '0.10kg - 5.00kg', rate: 'MYR8.00' }],
+            priceRates: [],
+          },
+        ],
+      },
+    },
+  });
+
+  assert.equal(option.zoneName, 'Custom KL');
+  assert.equal(option.amount, 8);
+  assert.equal(option.courier, 'Custom Courier Same Day');
+});

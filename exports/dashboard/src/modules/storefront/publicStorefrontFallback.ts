@@ -46,6 +46,7 @@ export function buildPreviewStorefrontFallback(storeSlug: string, records: Produ
       currency: 'RM',
       status: 'live',
       publishedUrl: '',
+      settings: {},
       branding: {
         brandName: storeName,
         tagline: liveTheme.preview.heading || 'Preview storefront from saved catalog data.',

@@ -12,6 +12,7 @@ const storefront: PublicStorefront = {
     currency: 'MYR',
     status: 'live',
     publishedUrl: 'https://shop.live.test',
+    settings: {},
     branding: {
       brandName: 'Live Store',
       tagline: 'Ready for customers',

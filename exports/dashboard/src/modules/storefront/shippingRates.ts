@@ -1,4 +1,5 @@
 import { shippingZonesSeed } from '../settings/data';
+import type { ShippingZone } from '../settings/types';
 
 export interface CheckoutShippingOption {
   id: string;
@@ -17,6 +18,8 @@ export interface CheckoutShippingInput {
   postcode?: string;
   country?: string;
   subtotal: number;
+  settings?: Record<string, any>;
+  zones?: ShippingZone[];
 }
 
 const stateAliases: Record<string, string> = {
@@ -51,15 +54,33 @@ function getCourierName(method: string) {
   return (match?.[1] ?? method).trim();
 }
 
-function resolveRegion(input: CheckoutShippingInput) {
+function isShippingZone(value: Partial<ShippingZone> | null | undefined): value is ShippingZone {
+  return Boolean(
+    value?.id &&
+      value?.name &&
+      Array.isArray(value?.regions) &&
+      Array.isArray(value?.weightRates) &&
+      Array.isArray(value?.priceRates),
+  );
+}
+
+function getConfiguredZones(input: CheckoutShippingInput) {
+  const settingsZones = input.settings?.shipping?.zones;
+  const zones = input.zones ?? (Array.isArray(settingsZones) ? settingsZones : []);
+  const validZones = zones.filter(isShippingZone);
+
+  return validZones.length > 0 ? validZones : shippingZonesSeed;
+}
+
+function resolveRegion(input: CheckoutShippingInput, zones: ShippingZone[]) {
   const haystack = [input.state, input.city, input.postcode].map(normalize).filter(Boolean);
   const expanded = haystack.flatMap((part) => [part, stateAliases[part]].filter(Boolean));
 
-  const matchedZone = shippingZonesSeed.find((zone) =>
+  const matchedZone = zones.find((zone) =>
     zone.regions.some((region) => expanded.includes(normalize(region))),
   );
 
-  return matchedZone ?? shippingZonesSeed[0];
+  return matchedZone ?? zones[0] ?? shippingZonesSeed[0];
 }
 
 export function getCheckoutShippingOptions(input: CheckoutShippingInput): CheckoutShippingOption[] {
@@ -77,7 +98,8 @@ export function getCheckoutShippingOptions(input: CheckoutShippingInput): Checko
     }];
   }
 
-  const zone = resolveRegion(input);
+  const zones = getConfiguredZones(input);
+  const zone = resolveRegion(input, zones);
   const baseRate = zone.weightRates[0];
   const freeRate = zone.priceRates.find((rate) => rate.rate.toUpperCase() === 'FREE' && input.subtotal >= parseMinimumSubtotal(rate.range));
   const amount = freeRate ? 0 : parseMoney(baseRate?.rate ?? 'MYR0.00');

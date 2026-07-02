@@ -53,6 +53,13 @@ class PublicStorefrontController extends Controller
             'shipping_address.state' => ['nullable', 'string', 'max:120'],
             'shipping_address.postcode' => ['nullable', 'string', 'max:40'],
             'shipping_address.country' => ['required', 'string', 'max:120'],
+            'shipping_method' => ['nullable', 'array'],
+            'shipping_method.id' => ['nullable', 'string', 'max:120'],
+            'shipping_method.label' => ['nullable', 'string', 'max:180'],
+            'shipping_method.zone_name' => ['nullable', 'string', 'max:120'],
+            'shipping_method.courier' => ['nullable', 'string', 'max:120'],
+            'shipping_method.service' => ['nullable', 'string', 'max:180'],
+            'shipping_method.amount' => ['nullable', 'integer', 'min:0', 'max:999999'],
             'payment_method' => ['nullable', 'string', 'max:80'],
             'items' => ['required', 'array', 'min:1', 'max:50'],
             'items.*.product_id' => ['required', 'integer'],
@@ -86,9 +93,13 @@ class PublicStorefrontController extends Controller
             ];
         })->values();
 
-        $total = $items->sum('line_total');
+        $shippingMethod = $data['shipping_method'] ?? [];
+        $shippingAmount = (int) data_get($shippingMethod, 'amount', 0);
+        $shippingLabel = data_get($shippingMethod, 'label') ?: data_get($shippingMethod, 'service');
+        $shippingCourier = data_get($shippingMethod, 'courier') ?: 'Not assigned';
+        $total = $items->sum('line_total') + $shippingAmount;
 
-        $order = DB::transaction(function () use ($data, $items, $store, $total): Order {
+        $order = DB::transaction(function () use ($data, $items, $shippingAmount, $shippingCourier, $shippingLabel, $shippingMethod, $store, $total): Order {
             $customer = CustomerProfile::query()->updateOrCreate(
                 ['tenant_id' => $store->tenant_id, 'email' => $data['customer']['email']],
                 [
@@ -116,7 +127,14 @@ class PublicStorefrontController extends Controller
                     'email' => $data['customer']['email'],
                     'phone' => $data['customer']['phone'] ?? null,
                 ],
-                'shipment' => ['tracking_location' => 'Order received'],
+                'shipment' => [
+                    'courier' => $shippingAmount > 0 || $shippingLabel ? $shippingCourier : null,
+                    'method' => $shippingLabel,
+                    'service' => data_get($shippingMethod, 'service'),
+                    'zone_name' => data_get($shippingMethod, 'zone_name'),
+                    'shipping_fee' => $shippingAmount,
+                    'tracking_location' => $shippingLabel ? "{$shippingLabel} selected at checkout" : 'Order received',
+                ],
             ]);
 
             $customer->update([
@@ -195,6 +213,9 @@ class PublicStorefrontController extends Controller
             'status' => data_get($storefront, 'status', 'draft'),
             'published_url' => data_get($storefront, 'published_url'),
             'branding' => data_get($settings, 'branding', []),
+            'settings' => [
+                'shipping' => data_get($settings, 'shipping', []),
+            ],
         ];
     }
 

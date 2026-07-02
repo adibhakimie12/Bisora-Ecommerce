@@ -48,7 +48,15 @@ interface ApiOrder {
   customer?: { id: number | string; name: string; email: string; status?: string } | null;
   items?: Array<{ id?: string; name: string; sku: string; quantity: number; price: number; image_url?: string | null }>;
   shipping_address?: (Partial<ShippingAddress> & { address_line_1?: string; address_line_2?: string }) | null;
-  shipment?: { courier?: string; status?: ApiFulfillmentStatus; tracking_location?: string; tracking_number?: string } | null;
+  shipment?: {
+    courier?: string;
+    method?: string;
+    service?: string;
+    shipping_fee?: number;
+    status?: ApiFulfillmentStatus;
+    tracking_location?: string;
+    tracking_number?: string;
+  } | null;
 }
 
 interface ApiReview {
@@ -143,6 +151,8 @@ export function mapOrderFromApi(order: ApiOrder): Order {
       status: order.shipment?.status ? titleCase<FulfillmentStatus>(order.shipment.status) : fulfillmentStatus,
       trackingLocation: order.shipment?.tracking_location ?? 'Awaiting update',
       trackingNumber: order.shipment?.tracking_number,
+      method: order.shipment?.method ?? order.shipment?.service,
+      shippingFee: typeof order.shipment?.shipping_fee === 'number' ? toMajorUnits(order.shipment.shipping_fee) : undefined,
     },
     shippingAddress: {
       recipient: order.shipping_address?.recipient ?? order.customer?.name ?? '',

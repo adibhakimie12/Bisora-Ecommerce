@@ -34,6 +34,25 @@ class PublicStorefrontApiTest extends TestCase
                     'status' => 'live',
                     'published_url' => 'https://shop.live.test',
                 ],
+                'shipping' => [
+                    'zones' => [
+                        [
+                            'id' => 'zone-kl',
+                            'name' => 'Semenanjung',
+                            'regions' => ['Kuala Lumpur', 'Selangor'],
+                            'methods' => ['J&T EXPRESS'],
+                            'weightRates' => [
+                                [
+                                    'id' => 'wr-kl',
+                                    'name' => 'J&T EXPRESS (2-3 working days)',
+                                    'range' => '0.10kg - 5.00kg',
+                                    'rate' => 'MYR6.00',
+                                ],
+                            ],
+                            'priceRates' => [],
+                        ],
+                    ],
+                ],
                 'website_pages' => [
                     [
                         'id' => 'about',
@@ -89,6 +108,7 @@ class PublicStorefrontApiTest extends TestCase
             ->assertJsonPath('data.store.name', 'Live Store')
             ->assertJsonPath('data.store.status', 'live')
             ->assertJsonPath('data.store.published_url', 'https://shop.live.test')
+            ->assertJsonPath('data.store.settings.shipping.zones.0.name', 'Semenanjung')
             ->assertJsonPath('data.products.0.title', 'Published Product')
             ->assertJsonPath('data.pages.0.title', 'About Us')
             ->assertJsonPath('data.blog_posts.0.title', 'Published Blog')
@@ -163,6 +183,14 @@ class PublicStorefrontApiTest extends TestCase
                 'country' => 'Malaysia',
             ],
             'payment_method' => 'manual_bank_transfer',
+            'shipping_method' => [
+                'id' => 'zone-kl-wr-kl',
+                'label' => 'J&T EXPRESS (2-3 working days)',
+                'zone_name' => 'Semenanjung',
+                'courier' => 'J&T EXPRESS',
+                'service' => 'J&T EXPRESS (2-3 working days)',
+                'amount' => 600,
+            ],
             'items' => [
                 ['product_id' => $product->id, 'quantity' => 2],
             ],
@@ -170,20 +198,22 @@ class PublicStorefrontApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.payment_status', 'pending')
             ->assertJsonPath('data.fulfillment_status', 'unfulfilled')
-            ->assertJsonPath('data.total', 25800)
+            ->assertJsonPath('data.total', 26400)
+            ->assertJsonPath('data.shipment.courier', 'J&T EXPRESS')
+            ->assertJsonPath('data.shipment.shipping_fee', 600)
             ->assertJsonPath('data.customer.email', 'nur@example.test');
 
         $this->assertDatabaseHas('customer_profiles', [
             'tenant_id' => $tenant->id,
             'email' => 'nur@example.test',
             'orders_count' => 1,
-            'total_spent' => 25800,
+            'total_spent' => 26400,
         ]);
 
         $this->assertDatabaseHas('orders', [
             'tenant_id' => $tenant->id,
             'customer_profile_id' => CustomerProfile::where('email', 'nur@example.test')->value('id'),
-            'total' => 25800,
+            'total' => 26400,
             'payment_method' => 'manual_bank_transfer',
         ]);
     }

@@ -11,6 +11,7 @@ interface ApiPublicStorefront {
     status: 'live' | 'draft';
     published_url?: string | null;
     branding: Record<string, any>;
+    settings?: Record<string, any>;
   };
   pages?: Array<Record<string, any>>;
   blog_posts?: Array<Record<string, any>>;
@@ -44,7 +45,7 @@ interface ApiPublicOrder {
   payment_method?: string | null;
   items?: Array<{ name: string; sku: string; quantity: number; price: number }>;
   shipping_address?: Record<string, string | null> | null;
-  shipment?: { courier?: string | null; tracking_number?: string | null; tracking_location?: string | null } | null;
+  shipment?: { courier?: string | null; tracking_number?: string | null; tracking_location?: string | null; method?: string | null; shipping_fee?: number | null } | null;
   customer?: {
     id: number | string;
     name: string;
@@ -64,6 +65,7 @@ export interface PublicStorefront {
     status: 'live' | 'draft';
     publishedUrl: string;
     branding: Record<string, any>;
+    settings: Record<string, any>;
   };
   pages: Array<Record<string, any>>;
   blogPosts: Array<Record<string, any>>;
@@ -164,6 +166,7 @@ export function mapPublicStorefrontFromApi(payload: ApiPublicStorefront): Public
       status: payload.store.status,
       publishedUrl: payload.store.published_url ?? '',
       branding: payload.store.branding ?? {},
+      settings: payload.store.settings ?? {},
     },
     pages: payload.pages ?? [],
     blogPosts: payload.blog_posts ?? [],
