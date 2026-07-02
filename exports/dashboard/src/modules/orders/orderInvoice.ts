@@ -39,6 +39,19 @@ export function buildInvoiceHtml(order: Order) {
       `,
     )
     .join('');
+  const shippingRow = order.shipment.shippingFee
+    ? `
+        <tr>
+          <td>
+            <strong>Shipping</strong>
+            <span>${escapeHtml(order.shipment.method ?? order.shipment.courier)}</span>
+          </td>
+          <td>1</td>
+          <td>${formatOrderMoney(order.shipment.shippingFee)}</td>
+          <td>${formatOrderMoney(order.shipment.shippingFee)}</td>
+        </tr>
+      `
+    : '';
 
   return `<!doctype html>
 <html>
@@ -104,7 +117,7 @@ export function buildInvoiceHtml(order: Order) {
             <th>Total</th>
           </tr>
         </thead>
-        <tbody>${items}</tbody>
+        <tbody>${items}${shippingRow}</tbody>
       </table>
       <p class="total">${formatOrderMoney(order.total)}</p>
     </section>

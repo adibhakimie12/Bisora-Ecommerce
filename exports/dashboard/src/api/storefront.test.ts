@@ -113,6 +113,14 @@ async function testSubmitPublicCheckoutPostsBuyerOrder() {
   const order = await submitPublicCheckout('live-store', {
     customer: { name: 'Nur Aisyah', email: 'nur@example.test', phone: '+60123456789' },
     shippingAddress: { addressLine1: 'No 12 Jalan Demo', city: 'Kuala Lumpur', postcode: '50000', country: 'Malaysia' },
+    shippingMethod: {
+      id: 'sz-1-wr-1',
+      label: 'J&T EXPRESS (2-3 working days)',
+      zoneName: 'Semenanjung',
+      courier: 'J&T EXPRESS',
+      service: 'J&T EXPRESS (2-3 working days)',
+      amount: 6,
+    },
     paymentMethod: 'manual_bank_transfer',
     items: [{ productId: '10', quantity: 2 }],
   }, { baseUrl: 'https://api.bisora.test/api', fetcher });
@@ -122,6 +130,14 @@ async function testSubmitPublicCheckoutPostsBuyerOrder() {
   assert.deepEqual(JSON.parse(requestBody), {
     customer: { name: 'Nur Aisyah', email: 'nur@example.test', phone: '+60123456789' },
     shipping_address: { address_line_1: 'No 12 Jalan Demo', city: 'Kuala Lumpur', postcode: '50000', country: 'Malaysia' },
+    shipping_method: {
+      id: 'sz-1-wr-1',
+      label: 'J&T EXPRESS (2-3 working days)',
+      zone_name: 'Semenanjung',
+      courier: 'J&T EXPRESS',
+      service: 'J&T EXPRESS (2-3 working days)',
+      amount: 600,
+    },
     payment_method: 'manual_bank_transfer',
     items: [{ product_id: 10, quantity: 2 }],
   });

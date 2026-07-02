@@ -8,6 +8,7 @@ import { buildPublicStorefrontThemeRuntime, type PublicStorefrontThemeRuntime } 
 import { loadBuilderHomepageState, type BuilderHomepageSection } from '../websiteBuilder/builderHomepageStore';
 import { createLocalCheckoutOrder, findLocalPublicOrder } from '../orders/checkoutOrderBridge';
 import { buildPublicOrderTrackingModel, shouldShowOrderTrackingPage } from './publicOrderTracking';
+import { formatShippingMoney, getCheckoutShippingOptions } from './shippingRates';
 
 interface CartLine {
   product: PublicStorefrontProductCard;
@@ -122,6 +123,18 @@ export function PublicStorefrontRuntime({
     const amount = Number(line.product.priceLabel.replace(/^[^\d]+/, ''));
     return sum + amount * line.quantity;
   }, 0);
+  const currency = storefront?.store.currency ?? 'MYR';
+  const shippingOptions = useMemo(
+    () => getCheckoutShippingOptions({
+      city: checkoutForm.city,
+      postcode: checkoutForm.postcode,
+      country: checkoutForm.country,
+      subtotal,
+    }),
+    [checkoutForm.city, checkoutForm.country, checkoutForm.postcode, subtotal],
+  );
+  const selectedShipping = shippingOptions[0];
+  const orderTotal = subtotal + (cart.length > 0 ? selectedShipping.amount : 0);
 
   const addToCart = (product: PublicStorefrontProductCard) => {
     if (!product.isInStock) {
@@ -170,6 +183,7 @@ export function PublicStorefrontRuntime({
         postcode: checkoutForm.postcode,
         country: checkoutForm.country,
       },
+      shippingMethod: selectedShipping,
       paymentMethod: 'manual_bank_transfer',
       items: cart.map((line) => ({
         productId: line.product.id,
@@ -398,7 +412,7 @@ export function PublicStorefrontRuntime({
           <div className="mt-5 border-t border-black/10 pt-5">
             <div className="flex items-center justify-between text-sm">
               <span>Subtotal</span>
-              <span className="font-semibold">{storefront?.store.currency ?? 'MYR'} {subtotal.toFixed(2)}</span>
+              <span className="font-semibold">{formatShippingMoney(currency, subtotal)}</span>
             </div>
             <div className="mt-5 space-y-3">
               <CheckoutInput
@@ -444,6 +458,25 @@ export function PublicStorefrontRuntime({
                 required
                 value={checkoutForm.country}
               />
+            </div>
+            <div className="mt-4 rounded border border-black/10 bg-white/50 p-3 text-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium">{selectedShipping.label}</p>
+                  <p className="mt-1 text-xs text-slate-500">{selectedShipping.helper}</p>
+                </div>
+                <span className="font-semibold">{formatShippingMoney(currency, cart.length > 0 ? selectedShipping.amount : 0)}</span>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2 border-t border-black/10 pt-4 text-sm">
+              <div className="flex items-center justify-between text-slate-600">
+                <span>Shipping</span>
+                <span>{formatShippingMoney(currency, cart.length > 0 ? selectedShipping.amount : 0)}</span>
+              </div>
+              <div className="flex items-center justify-between text-base font-semibold">
+                <span>Total</span>
+                <span>{formatShippingMoney(currency, orderTotal)}</span>
+              </div>
             </div>
             {checkoutError && <p className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-xs text-red-700">{checkoutError}</p>}
             {placedOrder && checkoutStatus === 'success' && (

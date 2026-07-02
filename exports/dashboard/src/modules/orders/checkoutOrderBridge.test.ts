@@ -89,19 +89,30 @@ test('createLocalCheckoutOrder saves a seller order and deducts catalog stock', 
       postcode: '50000',
       country: 'Malaysia',
     },
+    shippingMethod: {
+      id: 'sz-1-wr-1',
+      label: 'J&T EXPRESS (2-3 working days)',
+      zoneName: 'Semenanjung',
+      courier: 'J&T EXPRESS',
+      service: 'J&T EXPRESS (2-3 working days)',
+      amount: 6,
+    },
     paymentMethod: 'manual_bank_transfer',
     items: [{ productId: 'prod-comfy', quantity: 2 }],
   });
 
   assert.match(publicOrder.number, /^ORD-/);
-  assert.equal(publicOrder.total, 98);
+  assert.equal(publicOrder.total, 104);
   assert.equal(publicOrder.customer.email, 'buyer@example.test');
+  assert.equal(publicOrder.shipment.courier, 'J&T EXPRESS');
 
   const savedOrder = loadLocalOrders()[0];
   assert.equal(savedOrder.customer.name, 'Buyer One');
   assert.equal(savedOrder.items[0].sku, 'NEW-SKU-001');
   assert.equal(savedOrder.paymentStatus, 'Pending');
   assert.equal(savedOrder.fulfillmentStatus, 'Unfulfilled');
+  assert.equal(savedOrder.shipment.shippingFee, 6);
+  assert.equal(savedOrder.shipment.method, 'J&T EXPRESS (2-3 working days)');
 
   const savedProduct = loadProducts()[0];
   assert.equal(savedProduct.stock, 1);

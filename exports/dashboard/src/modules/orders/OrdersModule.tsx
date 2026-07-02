@@ -2170,6 +2170,9 @@ function OrderDetailPage({
                 <p className="text-xs uppercase tracking-wider text-on-surface-variant">Payment status</p>
                 <div className="mt-2"><StatusBadge status={order.paymentStatus} /></div>
               </div>
+              {order.shipment.shippingFee ? (
+                <Info label="Shipping method" value={`${order.shipment.method ?? order.shipment.courier} - ${formatOrderMoney(order.shipment.shippingFee)}`} />
+              ) : null}
               <Info label="Order total" value={formatOrderMoney(order.total)} />
               {order.paymentStatus === 'Pending' && (
                 <button

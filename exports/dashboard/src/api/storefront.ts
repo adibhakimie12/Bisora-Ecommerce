@@ -101,6 +101,14 @@ export interface PublicCheckoutPayload {
     postcode?: string;
     country: string;
   };
+  shippingMethod?: {
+    id: string;
+    label: string;
+    zoneName: string;
+    courier: string;
+    service: string;
+    amount: number;
+  };
   paymentMethod?: string;
   items: Array<{
     productId: string;
@@ -232,6 +240,16 @@ function toCheckoutApiPayload(payload: PublicCheckoutPayload) {
       ...(payload.shippingAddress.postcode ? { postcode: payload.shippingAddress.postcode } : {}),
       country: payload.shippingAddress.country,
     },
+    ...(payload.shippingMethod ? {
+      shipping_method: {
+        id: payload.shippingMethod.id,
+        label: payload.shippingMethod.label,
+        zone_name: payload.shippingMethod.zoneName,
+        courier: payload.shippingMethod.courier,
+        service: payload.shippingMethod.service,
+        amount: Math.round(payload.shippingMethod.amount * 100),
+      },
+    } : {}),
     payment_method: payload.paymentMethod ?? 'manual_bank_transfer',
     items: payload.items.map((item) => ({
       product_id: Number(item.productId),

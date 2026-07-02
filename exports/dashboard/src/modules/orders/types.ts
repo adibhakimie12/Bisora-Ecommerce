@@ -33,6 +33,8 @@ export interface ShipmentSummary {
   status: FulfillmentStatus;
   trackingLocation: string;
   trackingNumber?: string;
+  method?: string;
+  shippingFee?: number;
 }
 
 export interface Order {

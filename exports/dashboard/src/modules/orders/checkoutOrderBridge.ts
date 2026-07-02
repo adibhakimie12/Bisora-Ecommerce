@@ -83,8 +83,12 @@ export function createLocalCheckoutOrder(storeSlug: string, payload: PublicCheck
     }];
   });
   const total = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const shippingFee = Number(payload.shippingMethod?.amount ?? 0);
+  const orderTotal = Number((total + shippingFee).toFixed(2));
   const orderNumber = createOrderNumber(now);
   const formattedDate = formatDate(now);
+  const shippingCourier = payload.shippingMethod?.courier || 'Not assigned';
+  const shippingMethod = payload.shippingMethod?.label || 'Manual shipping';
 
   const sellerOrder: Order = {
     id: `#${orderNumber}`,
@@ -95,7 +99,7 @@ export function createLocalCheckoutOrder(storeSlug: string, payload: PublicCheck
     },
     products: orderItems.map((item) => item.name).join(', ') || 'No items',
     date: formattedDate,
-    total,
+    total: orderTotal,
     paymentStatus: 'Pending',
     settlementStatus: 'Unsettled',
     fulfillmentStatus: 'Unfulfilled',
@@ -103,9 +107,11 @@ export function createLocalCheckoutOrder(storeSlug: string, payload: PublicCheck
     items: orderItems,
     shipment: {
       orderDate: formattedDate,
-      courier: 'Not assigned',
+      courier: shippingCourier,
       status: 'Unfulfilled',
-      trackingLocation: 'Awaiting seller fulfillment',
+      trackingLocation: payload.shippingMethod ? `${shippingMethod} selected at checkout` : 'Awaiting seller fulfillment',
+      method: shippingMethod,
+      shippingFee,
     },
     shippingAddress: {
       recipient: payload.customer.name,
@@ -127,7 +133,7 @@ export function createLocalCheckoutOrder(storeSlug: string, payload: PublicCheck
   return {
     id: sellerOrder.id,
     number: orderNumber,
-    total,
+    total: orderTotal,
     paymentStatus: 'pending',
     settlementStatus: 'unsettled',
     fulfillmentStatus: 'unfulfilled',
@@ -139,9 +145,9 @@ export function createLocalCheckoutOrder(storeSlug: string, payload: PublicCheck
       price: item.price,
     })),
     shipment: {
-      courier: '',
+      courier: shippingCourier === 'Not assigned' ? '' : shippingCourier,
       trackingNumber: '',
-      trackingLocation: 'Awaiting seller fulfillment',
+      trackingLocation: sellerOrder.shipment.trackingLocation,
     },
     shippingAddress: {
       recipient: payload.customer.name,
