@@ -577,6 +577,40 @@ function mergeShippingRoutingRulesFromSettings(current: ShippingRoutingRule[], s
     }));
 }
 
+function isCourierMode(value: unknown): value is CourierProvider['mode'] {
+  return value === 'Live' || value === 'Test';
+}
+
+function isCourierSetupStage(value: unknown): value is CourierProvider['setupStage'] {
+  return value === 'Not Started' || value === 'Applied' || value === 'Ready to Connect' || value === 'Live';
+}
+
+function isCourierStatus(value: unknown): value is CourierProvider['status'] {
+  return value === 'Connected' || value === 'Disconnected' || value === 'Sandbox';
+}
+
+function mergeCouriersFromSettings(current: CourierProvider[], settings: Record<string, any>): CourierProvider[] {
+  const savedCouriers = settings.couriers;
+  if (!Array.isArray(savedCouriers)) {
+    return current;
+  }
+
+  return current.map((courier) => {
+    const saved = savedCouriers.find((item: Partial<CourierProvider>) => item.id === courier.id || item.slug === courier.slug);
+    if (!saved) {
+      return courier;
+    }
+
+    return {
+      ...courier,
+      enabledForRouting: typeof saved.enabledForRouting === 'boolean' ? saved.enabledForRouting : courier.enabledForRouting,
+      mode: isCourierMode(saved.mode) ? saved.mode : courier.mode,
+      setupStage: isCourierSetupStage(saved.setupStage) ? saved.setupStage : courier.setupStage,
+      status: isCourierStatus(saved.status) ? saved.status : courier.status,
+    };
+  });
+}
+
 function isPaymentSetupStage(value: unknown): value is PaymentSetupStage {
   return value === 'Not Started' || value === 'Applied' || value === 'Awaiting Approval' || value === 'Ready to Connect' || value === 'Live';
 }
@@ -1014,6 +1048,7 @@ export function SettingsModule({ section, subSection }: SettingsModuleProps) {
         setPaymentGateways((current) => mergePaymentGatewaysFromSettings(current, settings.settings));
         setManualMethods((current) => mergeManualMethodsFromSettings(current, settings.settings));
         setPaymentRules((current) => mergePaymentRulesFromSettings(current, settings.settings));
+        setCouriers((current) => mergeCouriersFromSettings(current, settings.settings));
         setShippingProviders((current) => mergeShippingProvidersFromSettings(current, settings.settings));
         setShippingZones((current) => mergeShippingZonesFromSettings(current, settings.settings));
         setShippingRoutingRules((current) => mergeShippingRoutingRulesFromSettings(current, settings.settings));

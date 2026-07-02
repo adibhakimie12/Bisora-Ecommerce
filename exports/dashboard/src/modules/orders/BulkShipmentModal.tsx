@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Download, Eye, Loader2, X } from 'lucide-react';
 import type { BulkShipmentConfig, GeneratedShipment, Order } from './types';
-import { getCourierSettingByName, getEnabledCourierSettings } from './shippingSettings';
+import { getEnabledCourierSettings, type CourierSetting } from './shippingSettings';
 import { StatusBadge } from './StatusBadge';
 
 type FlowStep = 'configure' | 'processing' | 'complete';
@@ -13,8 +13,8 @@ const processingSteps = [
   'Sending notifications',
 ];
 
-export function BulkShipmentModal({ orders, onClose }: { orders: Order[]; onClose: () => void }) {
-  const enabledCouriers = useMemo(() => getEnabledCourierSettings(), []);
+export function BulkShipmentModal({ couriers, orders, onClose }: { couriers?: CourierSetting[]; orders: Order[]; onClose: () => void }) {
+  const enabledCouriers = useMemo(() => couriers ?? getEnabledCourierSettings(), [couriers]);
   const defaultCourier = enabledCouriers[0]?.name ?? '';
   const defaultShippingMethod = enabledCouriers[0]?.serviceTypes[0] ?? '';
 
@@ -29,7 +29,7 @@ export function BulkShipmentModal({ orders, onClose }: { orders: Order[]; onClos
   });
 
   useEffect(() => {
-    const courier = getCourierSettingByName(config.courier);
+    const courier = enabledCouriers.find((item) => item.name === config.courier);
     if (!courier) {
       if (config.courier === defaultCourier && config.shippingMethod === defaultShippingMethod) {
         return;
@@ -49,7 +49,7 @@ export function BulkShipmentModal({ orders, onClose }: { orders: Order[]; onClos
         shippingMethod: courier.serviceTypes[0] ?? '',
       }));
     }
-  }, [config.courier, config.shippingMethod, defaultCourier, defaultShippingMethod]);
+  }, [config.courier, config.shippingMethod, defaultCourier, defaultShippingMethod, enabledCouriers]);
 
   const shipments = useMemo<GeneratedShipment[]>(
     () =>
@@ -113,12 +113,12 @@ function ConfigureStep({
   onGenerate,
 }: {
   config: BulkShipmentConfig;
-  enabledCouriers: ReturnType<typeof getEnabledCourierSettings>;
+  enabledCouriers: CourierSetting[];
   orders: Order[];
   onConfigChange: (config: BulkShipmentConfig) => void;
   onGenerate: () => void;
 }) {
-  const selectedCourier = getCourierSettingByName(config.courier);
+  const selectedCourier = enabledCouriers.find((courier) => courier.name === config.courier);
   const shippingMethodOptions = selectedCourier?.serviceTypes ?? [];
 
   return (

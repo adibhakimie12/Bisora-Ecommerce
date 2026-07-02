@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { API_STORAGE_KEYS } from '../../api/http';
+import { fetchStoreSettings } from '../../api/settings';
 import { shouldUseDemoData } from '../../liveDataMode';
 import {
   convertDraftOrder,
@@ -52,7 +53,7 @@ import {
 import type { Order } from './types';
 import type { Product } from '../products/types';
 import { BulkShipmentModal } from './BulkShipmentModal';
-import { getCourierSettingByName, getEnabledCourierSettings } from './shippingSettings';
+import { getEnabledCourierSettings, type CourierSetting } from './shippingSettings';
 import { StatusBadge } from './StatusBadge';
 
 interface OrdersModuleProps {
@@ -217,6 +218,7 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
   const [actionDialog, setActionDialog] = useState<ActionDialogState | null>(null);
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [manualTrackingOrderId, setManualTrackingOrderId] = useState<string | null>(null);
+  const [courierSettings, setCourierSettings] = useState<CourierSetting[]>(() => getEnabledCourierSettings());
   const [sendInvoiceDraft, setSendInvoiceDraft] = useState<SendInvoiceDraft | null>(null);
   const [manualTrackingMap, setManualTrackingMap] = useState<Record<string, ManualTrackingState>>({});
   const [fulfillmentStageMap, setFulfillmentStageMap] = useState<Record<string, SellerFulfillmentStage>>({});
@@ -250,6 +252,14 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
 
   useEffect(() => {
     if (!hasApiToken()) return;
+
+    fetchStoreSettings()
+      .then((settings) => {
+        setCourierSettings(getEnabledCourierSettings(settings.settings));
+      })
+      .catch(() => {
+        setCourierSettings(getEnabledCourierSettings());
+      });
 
     const catalogApi = createCatalogApi();
     catalogApi.listProducts()
@@ -464,6 +474,7 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
     <>
       {selectedOrder && subSection === 'shipment-processing' ? (
         <ShipmentProcessingPage
+          courierSettings={courierSettings}
           order={selectedOrder}
           onBack={() => (window.location.hash = `/orders/${routeId(selectedOrder.id)}`)}
           onPrintWaybill={() =>
@@ -736,11 +747,12 @@ export function OrdersModule({ section, orderId, subSection }: OrdersModuleProps
       )}
 
       {showBulkShipment && (
-        <BulkShipmentModal orders={selectedOrders} onClose={() => setShowBulkShipment(false)} />
+        <BulkShipmentModal couriers={courierSettings} orders={selectedOrders} onClose={() => setShowBulkShipment(false)} />
       )}
 
       {manualTrackingOrderId && (
         <ManualTrackingModal
+          courierSettings={courierSettings}
           orderId={manualTrackingOrderId}
           existing={manualTrackingMap[manualTrackingOrderId]}
           onClose={() => setManualTrackingOrderId(null)}
@@ -2199,18 +2211,20 @@ function OrderDetailPage({
 }
 
 function ShipmentProcessingPage({
+  courierSettings,
   order,
   onBack,
   onPrintWaybill,
 }: {
+  courierSettings: CourierSetting[];
   order: Order;
   onBack: () => void;
   onPrintWaybill: () => void;
 }) {
-  const enabledCouriers = useMemo(() => getEnabledCourierSettings(), []);
+  const enabledCouriers = courierSettings;
   const parcelProfile = useMemo(() => deriveOrderParcelProfile(order), [order]);
   const initialCourier = useMemo(() => {
-    const fromOrder = getCourierSettingByName(order.shipment.courier);
+    const fromOrder = enabledCouriers.find((courier) => courier.name === order.shipment.courier);
     if (fromOrder) {
       return fromOrder.name;
     }
@@ -2219,7 +2233,7 @@ function ShipmentProcessingPage({
   }, [enabledCouriers, order.shipment.courier]);
 
   const [selectedCourier, setSelectedCourier] = useState(initialCourier);
-  const activeCourier = getCourierSettingByName(selectedCourier);
+  const activeCourier = enabledCouriers.find((courier) => courier.name === selectedCourier);
   const serviceTypes = activeCourier?.serviceTypes ?? [];
   const [selectedServiceType, setSelectedServiceType] = useState(serviceTypes[0] ?? '');
   const [shipmentBanner, setShipmentBanner] = useState<BannerState | null>(null);
@@ -2260,7 +2274,7 @@ function ShipmentProcessingPage({
     return () => window.clearTimeout(timeout);
   }, [shipmentBanner]);
 
-  const autoAssignmentMatched = Boolean(getCourierSettingByName(order.shipment.courier));
+  const autoAssignmentMatched = Boolean(enabledCouriers.find((courier) => courier.name === order.shipment.courier));
 
   return (
     <div className="space-y-6">
@@ -2731,17 +2745,22 @@ function CreateShipmentModal({
 }
 
 function ManualTrackingModal({
+  courierSettings,
   orderId,
   existing,
   onClose,
   onSave,
 }: {
+  courierSettings: CourierSetting[];
   orderId: string;
   existing?: ManualTrackingState;
   onClose: () => void;
   onSave: (data: ManualTrackingState) => void;
 }) {
-  const commonCouriers = ['J&T', 'Pos Laju', 'DHL', 'Ninja Van', 'GDEX', 'Aramex'];
+  const commonCouriers = useMemo(
+    () => Array.from(new Set([...courierSettings.map((courier) => courier.name), 'J&T', 'Pos Laju', 'DHL', 'Ninja Van', 'GDEX', 'Aramex'])),
+    [courierSettings],
+  );
   const initialPreset = existing && commonCouriers.includes(existing.courierName) ? existing.courierName : existing?.courierName ? 'Other' : '';
   const [carrierPreset, setCarrierPreset] = useState(initialPreset);
   const [courierName, setCourierName] = useState(existing?.courierName ?? '');
