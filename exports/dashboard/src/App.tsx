@@ -23,7 +23,12 @@ import {
   WebsiteBuilderModuleLazy,
 } from './moduleRegistry';
 import { categories } from './modules/products/data';
-import { buildSellerOrderNotifications, getOrdersAttentionCount, getUnreadSellerNotificationCount } from './modules/orders/orderNotifications';
+import {
+  buildSellerOrderNotifications,
+  filterDismissedSellerNotifications,
+  getOrdersAttentionCount,
+  getUnreadSellerNotificationCount,
+} from './modules/orders/orderNotifications';
 import { loadLocalOrders, subscribeOrders } from './modules/orders/orderStore';
 import type { Order } from './modules/orders/types';
 import { resolveCanonicalPathFromHash, syncCanonicalUrl } from './modules/seo/canonical';
@@ -53,11 +58,12 @@ const routeLabels = new Map([
 ]);
 
 const SELLER_NOTIFICATION_READ_STORAGE_KEY = 'bisora-seller-notification-read-ids';
+const SELLER_NOTIFICATION_DISMISSED_STORAGE_KEY = 'bisora-seller-notification-dismissed-ids';
 
-function loadReadSellerNotificationIds() {
+function loadStoredIdSet(storageKey: string) {
   if (typeof window === 'undefined') return new Set<string>();
 
-  const saved = window.localStorage.getItem(SELLER_NOTIFICATION_READ_STORAGE_KEY);
+  const saved = window.localStorage.getItem(storageKey);
   if (!saved) return new Set<string>();
 
   try {
@@ -67,9 +73,9 @@ function loadReadSellerNotificationIds() {
   }
 }
 
-function saveReadSellerNotificationIds(ids: Set<string>) {
+function saveStoredIdSet(storageKey: string, ids: Set<string>) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(SELLER_NOTIFICATION_READ_STORAGE_KEY, JSON.stringify([...ids]));
+  window.localStorage.setItem(storageKey, JSON.stringify([...ids]));
 }
 
 export default function App() {
@@ -77,13 +83,18 @@ export default function App() {
   const [session, setSession] = useState(() => getStoredSession());
   const [orderAttentionCount, setOrderAttentionCount] = useState(() => getOrdersAttentionCount(loadLocalOrders()));
   const [ordersForAlerts, setOrdersForAlerts] = useState<Order[]>(() => loadLocalOrders());
-  const [readSellerNotificationIds, setReadSellerNotificationIds] = useState(() => loadReadSellerNotificationIds());
+  const [readSellerNotificationIds, setReadSellerNotificationIds] = useState(() => loadStoredIdSet(SELLER_NOTIFICATION_READ_STORAGE_KEY));
+  const [dismissedSellerNotificationIds, setDismissedSellerNotificationIds] = useState(() => loadStoredIdSet(SELLER_NOTIFICATION_DISMISSED_STORAGE_KEY));
   const [productRecords] = useStorefrontProducts();
   const [pageRecords] = useStorefrontPages();
   const activeItem = route.module === 'Placeholder' ? route.label : route.module;
-  const sellerNotifications = useMemo(
+  const allSellerNotifications = useMemo(
     () => buildSellerOrderNotifications(ordersForAlerts, readSellerNotificationIds),
     [ordersForAlerts, readSellerNotificationIds],
+  );
+  const sellerNotifications = useMemo(
+    () => filterDismissedSellerNotifications(allSellerNotifications, dismissedSellerNotificationIds),
+    [allSellerNotifications, dismissedSellerNotificationIds],
   );
   const unreadSellerNotificationCount = getUnreadSellerNotificationCount(sellerNotifications);
 
@@ -201,7 +212,7 @@ export default function App() {
     setReadSellerNotificationIds((current) => {
       const next = new Set(current);
       next.add(notificationId);
-      saveReadSellerNotificationIds(next);
+      saveStoredIdSet(SELLER_NOTIFICATION_READ_STORAGE_KEY, next);
       return next;
     });
   };
@@ -210,7 +221,16 @@ export default function App() {
     setReadSellerNotificationIds((current) => {
       const next = new Set(current);
       sellerNotifications.forEach((notification) => next.add(notification.id));
-      saveReadSellerNotificationIds(next);
+      saveStoredIdSet(SELLER_NOTIFICATION_READ_STORAGE_KEY, next);
+      return next;
+    });
+  };
+
+  const clearReadSellerNotifications = () => {
+    setDismissedSellerNotificationIds((current) => {
+      const next = new Set(current);
+      sellerNotifications.filter((notification) => notification.read).forEach((notification) => next.add(notification.id));
+      saveStoredIdSet(SELLER_NOTIFICATION_DISMISSED_STORAGE_KEY, next);
       return next;
     });
   };
@@ -223,6 +243,7 @@ export default function App() {
         <TopHeader
           notifications={sellerNotifications}
           onLogout={logout}
+          onClearReadNotifications={clearReadSellerNotifications}
           onMarkAllNotificationsRead={markAllSellerNotificationsRead}
           onNotificationClick={markSellerNotificationRead}
           onTenantChange={switchTenant}

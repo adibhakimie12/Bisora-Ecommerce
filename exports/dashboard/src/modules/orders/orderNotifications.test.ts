@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildSellerOrderNotifications, getOrdersAttentionCount, getUnreadSellerNotificationCount } from './orderNotifications';
+import {
+  buildSellerOrderNotifications,
+  filterDismissedSellerNotifications,
+  filterSellerNotifications,
+  getOrdersAttentionCount,
+  getUnreadSellerNotificationCount,
+} from './orderNotifications';
 import type { Order } from './types';
 
 function createOrder(id: string, fulfillmentStatus: Order['fulfillmentStatus'], paymentStatus: Order['paymentStatus'] = 'Paid'): Order {
@@ -75,4 +81,26 @@ test('getUnreadSellerNotificationCount ignores read notifications', () => {
 
   assert.equal(getUnreadSellerNotificationCount(notifications), 0);
   assert.equal(notifications[0]?.read, true);
+});
+
+test('filterSellerNotifications can show unread alerts only', () => {
+  const notifications = buildSellerOrderNotifications(
+    [createOrder('#ORD-1', 'Unfulfilled', 'Pending'), createOrder('#ORD-2', 'Delivered', 'Paid')],
+    new Set(['#ORD-2:delivered', '#ORD-2:payment-paid', '#ORD-2:tracking-saved']),
+  );
+
+  assert.deepEqual(
+    filterSellerNotifications(notifications, 'unread').map((notification) => notification.id),
+    ['#ORD-1:new-order'],
+  );
+  assert.equal(filterSellerNotifications(notifications, 'all').length, 4);
+});
+
+test('filterDismissedSellerNotifications hides cleared read alerts', () => {
+  const notifications = buildSellerOrderNotifications([createOrder('#ORD-1', 'Shipped', 'Paid')]);
+
+  assert.deepEqual(
+    filterDismissedSellerNotifications(notifications, new Set(['#ORD-1:shipped', '#ORD-1:payment-paid'])).map((notification) => notification.id),
+    ['#ORD-1:tracking-saved'],
+  );
 });

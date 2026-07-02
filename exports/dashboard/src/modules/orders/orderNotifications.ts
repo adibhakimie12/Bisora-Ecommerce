@@ -11,6 +11,8 @@ export interface SellerOrderNotification {
   read: boolean;
 }
 
+export type SellerNotificationFilter = 'all' | 'unread';
+
 export function getOrdersAttentionCount(orders: Order[]) {
   return orders.filter((order) => isPendingFulfillment(order.fulfillmentStatus)).length;
 }
@@ -85,4 +87,16 @@ export function buildSellerOrderNotifications(orders: Order[], readIds = new Set
 
 export function getUnreadSellerNotificationCount(notifications: SellerOrderNotification[]) {
   return notifications.filter((notification) => !notification.read).length;
+}
+
+export function filterSellerNotifications(notifications: SellerOrderNotification[], filter: SellerNotificationFilter) {
+  if (filter === 'unread') {
+    return notifications.filter((notification) => !notification.read);
+  }
+
+  return notifications;
+}
+
+export function filterDismissedSellerNotifications(notifications: SellerOrderNotification[], dismissedIds: Set<string>) {
+  return notifications.filter((notification) => !dismissedIds.has(notification.id));
 }

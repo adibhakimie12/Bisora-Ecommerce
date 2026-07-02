@@ -1,7 +1,7 @@
 import { Bell, ChevronDown, CreditCard, Crown, LogOut, Search, UserCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import type { AdminSession } from '../api/authSession';
-import type { SellerOrderNotification } from '../modules/orders/orderNotifications';
+import { filterSellerNotifications, type SellerNotificationFilter, type SellerOrderNotification } from '../modules/orders/orderNotifications';
 
 export function TopHeader({
   session,
@@ -11,6 +11,7 @@ export function TopHeader({
   unreadNotificationCount = 0,
   onNotificationClick,
   onMarkAllNotificationsRead,
+  onClearReadNotifications,
 }: {
   session: AdminSession;
   onLogout: () => void;
@@ -19,9 +20,11 @@ export function TopHeader({
   unreadNotificationCount?: number;
   onNotificationClick?: (notificationId: string) => void;
   onMarkAllNotificationsRead?: () => void;
+  onClearReadNotifications?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationFilter, setNotificationFilter] = useState<SellerNotificationFilter>('all');
   const displayName = session.user.name || session.user.email;
   const activeTenant = session.tenants.find((tenant) => tenant.id === session.activeTenantId) ?? session.tenants[0];
   const initials = displayName
@@ -30,6 +33,8 @@ export function TopHeader({
     .join('')
     .slice(0, 2)
     .toUpperCase();
+  const visibleNotifications = filterSellerNotifications(notifications, notificationFilter);
+  const hasReadNotifications = notifications.some((notification) => notification.read);
 
   return (
     <header className="sticky top-0 z-20 flex flex-col gap-4 border-b border-outline-variant/20 bg-surface-lowest/95 px-4 py-4 backdrop-blur sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
@@ -91,9 +96,11 @@ export function TopHeader({
               <div className="flex items-center justify-between gap-3 px-2 py-2">
                 <div>
                   <p className="text-sm font-semibold">Notifications</p>
-                  <p className="text-xs text-on-surface-variant">{unreadNotificationCount} unread order alerts</p>
+                  <p className="text-xs text-on-surface-variant">
+                    {unreadNotificationCount > 0 ? `${unreadNotificationCount} unread order alerts` : 'No unread alerts'}
+                  </p>
                 </div>
-                {notifications.length > 0 && (
+                {unreadNotificationCount > 0 ? (
                   <button
                     className="rounded border border-outline-variant/30 px-2 py-1 text-xs hover:bg-surface-low"
                     onClick={onMarkAllNotificationsRead}
@@ -101,14 +108,39 @@ export function TopHeader({
                   >
                     Mark all read
                   </button>
-                )}
+                ) : hasReadNotifications ? (
+                  <button
+                    className="rounded border border-outline-variant/30 px-2 py-1 text-xs hover:bg-surface-low"
+                    onClick={onClearReadNotifications}
+                    type="button"
+                  >
+                    Clear read
+                  </button>
+                ) : null}
               </div>
 
+              {notifications.length > 0 && (
+                <div className="mb-2 grid grid-cols-2 gap-1 rounded bg-surface p-1 text-xs">
+                  {(['all', 'unread'] as SellerNotificationFilter[]).map((filter) => (
+                    <button
+                      className={`rounded px-2 py-1.5 ${notificationFilter === filter ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-low'}`}
+                      key={filter}
+                      onClick={() => setNotificationFilter(filter)}
+                      type="button"
+                    >
+                      {filter === 'all' ? 'All alerts' : 'Unread only'}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="max-h-96 overflow-y-auto">
-                {notifications.length === 0 ? (
-                  <div className="rounded bg-surface p-4 text-sm text-on-surface-variant">No order alerts yet.</div>
+                {visibleNotifications.length === 0 ? (
+                  <div className="rounded bg-surface p-4 text-sm text-on-surface-variant">
+                    {notificationFilter === 'unread' ? 'No unread order alerts.' : 'No order alerts yet.'}
+                  </div>
                 ) : (
-                  notifications.slice(0, 8).map((notification) => (
+                  visibleNotifications.slice(0, 8).map((notification) => (
                     <a
                       className={`block rounded px-3 py-3 text-sm hover:bg-surface-low ${notification.read ? 'text-on-surface-variant' : 'bg-primary/5 text-on-surface'}`}
                       href={notification.href}
