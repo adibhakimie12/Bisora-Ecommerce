@@ -1,5 +1,5 @@
 import { Bell, ChevronDown, CreditCard, Crown, LogOut, Search, UserCircle2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AdminSession } from '../api/authSession';
 import { filterSellerNotifications, type SellerNotificationFilter, type SellerOrderNotification } from '../modules/orders/orderNotifications';
 
@@ -25,6 +25,8 @@ export function TopHeader({
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationFilter, setNotificationFilter] = useState<SellerNotificationFilter>('all');
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
   const displayName = session.user.name || session.user.email;
   const activeTenant = session.tenants.find((tenant) => tenant.id === session.activeTenantId) ?? session.tenants[0];
   const initials = displayName
@@ -35,6 +37,26 @@ export function TopHeader({
     .toUpperCase();
   const visibleNotifications = filterSellerNotifications(notifications, notificationFilter);
   const hasReadNotifications = notifications.some((notification) => notification.read);
+
+  useEffect(() => {
+    if (!notificationsOpen && !menuOpen) return;
+
+    const closeOpenMenus = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      if (notificationsOpen && !notificationsRef.current?.contains(target)) {
+        setNotificationsOpen(false);
+      }
+
+      if (menuOpen && !profileMenuRef.current?.contains(target)) {
+        setMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', closeOpenMenus);
+    return () => document.removeEventListener('pointerdown', closeOpenMenus);
+  }, [menuOpen, notificationsOpen]);
 
   return (
     <header className="sticky top-0 z-20 flex flex-col gap-4 border-b border-outline-variant/20 bg-surface-lowest/95 px-4 py-4 backdrop-blur sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
@@ -73,7 +95,7 @@ export function TopHeader({
           />
         </label>
 
-        <div className="relative">
+        <div className="relative" ref={notificationsRef}>
           <button
             className="relative inline-flex h-10 w-10 items-center justify-center rounded border border-outline-variant/30 text-on-surface-variant hover:text-primary"
             onClick={() => {
@@ -169,7 +191,7 @@ export function TopHeader({
           )}
         </div>
 
-        <div className="relative">
+        <div className="relative" ref={profileMenuRef}>
           <button
             className="flex items-center gap-3 rounded border border-outline-variant/30 px-3 py-2"
             onClick={() => {

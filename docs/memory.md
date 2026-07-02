@@ -145,6 +145,7 @@
 - Invoice menu `Download PDF` opens the printable invoice through a `blob:` document instead of writing to `about:blank`, so Chrome/Vercel should render the invoice content before seller saves as PDF. Real `Email invoice` delivery still depends on connecting the notification provider/SMTP.
 - Seller notification bell now shows unread in-app order alerts from seller order data: new order needs action, payment confirmed, tracking saved, shipped, and delivered. Clicking an alert opens that order detail and marks the alert read; read state is stored locally for the current rollout.
 - Seller notification drawer UX now has `All alerts` / `Unread only`, shows `No unread alerts` when badge is clear, and lets seller `Clear read` so old read alerts can be hidden without deleting future alerts.
+- Seller notification and profile dropdowns close when seller clicks outside the open menu, so the bell menu no longer requires clicking the bell again to dismiss.
 - Near-term rollout order: finish basic in-app seller order notifications, then connect shipping settings/courier integration, then wire provider-backed email/WhatsApp notifications.
 - Product variant images and draft stock should be preserved when a variant name is repaired by matching the closest color/size variant key.
 - Live tenant product lists read cached products immediately while the backend refreshes so seller navigation does not briefly look empty after returning from edit screens.
